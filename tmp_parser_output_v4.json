@@ -1,0 +1,142 @@
+[
+  {
+    "page": 1,
+    "day": 1,
+    "start_period": 1,
+    "end_period": 2,
+    "name": "优化导论实验&",
+    "weeks": "9-16周",
+    "location": "电子楼418A",
+    "teacher": "郑立刚"
+  },
+  {
+    "page": 1,
+    "day": 1,
+    "start_period": 1,
+    "end_period": 2,
+    "name": "自然语言处理&",
+    "weeks": "5-8周",
+    "location": "电子楼416A",
+    "teacher": "杨朔"
+  },
+  {
+    "page": 1,
+    "day": 1,
+    "start_period": 3,
+    "end_period": 4,
+    "name": "计算机视觉与模式识别",
+    "weeks": "1-16周",
+    "location": "文新205",
+    "teacher": "谢延昭"
+  },
+  {
+    "page": 2,
+    "day": 1,
+    "start_period": 5,
+    "end_period": 6,
+    "name": "计算机视觉与模式识别实验&",
+    "weeks": "9-16周",
+    "location": "电子楼513",
+    "teacher": "谢延昭"
+  },
+  {
+    "page": 2,
+    "day": 1,
+    "start_period": 6,
+    "end_period": 8,
+    "name": "自然语言处理",
+    "weeks": "1-8周",
+    "location": "文渊406",
+    "teacher": "杨朔教"
+  },
+  {
+    "page": 1,
+    "day": 2,
+    "start_period": 1,
+    "end_period": 2,
+    "name": "物联网技术",
+    "weeks": "1-16周",
+    "location": "文新205",
+    "teacher": "唐琳"
+  },
+  {
+    "page": 1,
+    "day": 2,
+    "start_period": 3,
+    "end_period": 4,
+    "name": "云平台与大数据",
+    "weeks": "13-16周",
+    "location": "文渊306",
+    "teacher": "王健雄"
+  },
+  {
+    "page": 2,
+    "day": 2,
+    "start_period": 5,
+    "end_period": 6,
+    "name": "大学生心理健康教育2",
+    "weeks": "8周,14周",
+    "location": "理科南306（活）",
+    "teacher": "谭庭松"
+  },
+  {
+    "page": 2,
+    "day": 2,
+    "start_period": 7,
+    "end_period": 8,
+    "name": "大学生心理健康教育实践课",
+    "weeks": "12周",
+    "location": "文新315（活）",
+    "teacher": "unknown_teacher"
+  },
+  {
+    "page": 3,
+    "day": 3,
+    "start_period": 9,
+    "end_period": 10,
+    "name": "优化导论",
+    "weeks": "1-16周",
+    "location": "理科南214",
+    "teacher": "郑立刚"
+  },
+  {
+    "page": 2,
+    "day": 4,
+    "start_period": 7,
+    "end_period": 8,
+    "name": "云平台与大数据&",
+    "weeks": "9-16周",
+    "location": "电子楼416A",
+    "teacher": "王"
+  },
+  {
+    "page": 2,
+    "day": 4,
+    "start_period": 7,
+    "end_period": 8,
+    "name": "大学生职业发展与就业指导2",
+    "weeks": "5-8周",
+    "location": "文渊305（阶）",
+    "teacher": "unknown_teacher"
+  },
+  {
+    "page": 1,
+    "day": 5,
+    "start_period": 1,
+    "end_period": 2,
+    "name": "物联网技术&",
+    "weeks": "1-16周",
+    "location": "电子楼412B",
+    "teacher": "唐琳"
+  },
+  {
+    "page": 2,
+    "day": 5,
+    "start_period": 5,
+    "end_period": 7,
+    "name": "云平台与大数据",
+    "weeks": "1-8周",
+    "location": "文渊306",
+    "teacher": "王健雄"
+  }
+]
