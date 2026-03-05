@@ -29,6 +29,7 @@ data class CourseEntity(
     val startPeriod: Int,
     val endPeriod: Int,
     val weekPattern: String,
+    val skipWeekPattern: String = "",
     val rawText: String,
     val sourceConfidence: Float,
 )

@@ -11,6 +11,7 @@ data class CourseEntry(
     val startPeriod: Int,
     val endPeriod: Int,
     val weekPattern: String = "all",
+    val skipWeekPattern: String = "",
     val rawText: String = "",
     val sourceConfidence: Float = 0.5f,
 )

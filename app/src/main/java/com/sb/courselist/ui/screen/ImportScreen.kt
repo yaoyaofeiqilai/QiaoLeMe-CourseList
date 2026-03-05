@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,6 +68,7 @@ import com.sb.courselist.ui.theme.MintBg
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 @Composable
 fun ImportScreen(
@@ -80,6 +82,7 @@ fun ImportScreen(
     val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault()) }
     var termStartEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
     var editingCourse by remember { mutableStateOf<CourseEntry?>(null) }
+    var saveHintMessage by remember { mutableStateOf<String?>(null) }
 
     val preview = uiState.previewSchedule
     LaunchedEffect(preview?.meta?.termStartEpochDay) {
@@ -87,6 +90,11 @@ fun ImportScreen(
         if (termStartEpochDay == null && importedTermStart > 0L) {
             termStartEpochDay = importedTermStart
         }
+    }
+    LaunchedEffect(saveHintMessage) {
+        if (saveHintMessage == null) return@LaunchedEffect
+        delay(2200L)
+        saveHintMessage = null
     }
 
     fun showTermStartDateDialog() {
@@ -251,9 +259,16 @@ fun ImportScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             ElevatedButton(
-                                onClick = { onSavePreview(termStartEpochDay) },
+                                onClick = {
+                                    val chosenStart = termStartEpochDay
+                                    if (chosenStart == null || chosenStart <= 0L) {
+                                        saveHintMessage = "\u8bf7\u5148\u8bbe\u7f6e\u5f00\u5b66\u65e5\u671f\uff0c\u518d\u4fdd\u5b58\u8bfe\u8868\u54e6\u3002"
+                                    } else {
+                                        onSavePreview(chosenStart)
+                                    }
+                                },
                                 modifier = Modifier.weight(1f),
-                                enabled = !uiState.isSaving && termStartEpochDay != null,
+                                enabled = !uiState.isSaving,
                             ) {
                                 Icon(Icons.Rounded.Save, contentDescription = null)
                                 Text(" 保存")
@@ -269,6 +284,15 @@ fun ImportScreen(
                     }
                 }
             }
+        }
+
+        saveHintMessage?.let { message ->
+            ImportSaveHintBubble(
+                message = message,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 108.dp, start = 14.dp, end = 14.dp),
+            )
         }
     }
 
@@ -367,6 +391,41 @@ private fun HeroImportCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ImportSaveHintBubble(
+    message: String,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(18.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFFEAF8FF),
+                            Color(0xFFF3EDFF),
+                            Color(0xFFFFF4E5),
+                        ),
+                    ),
+                )
+                .border(1.dp, Color.White.copy(alpha = 0.95f), RoundedCornerShape(18.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2E4C63),
+            )
         }
     }
 }

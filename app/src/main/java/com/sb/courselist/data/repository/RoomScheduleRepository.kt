@@ -87,6 +87,7 @@ private fun ScheduleWithCourses.toDomain(): ParsedSchedule {
                 startPeriod = entity.startPeriod,
                 endPeriod = entity.endPeriod,
                 weekPattern = entity.weekPattern,
+                skipWeekPattern = entity.skipWeekPattern,
                 rawText = entity.rawText,
                 sourceConfidence = entity.sourceConfidence,
             )
@@ -106,6 +107,7 @@ private fun CourseEntry.toEntity(scheduleId: Long): CourseEntity {
         startPeriod = startPeriod,
         endPeriod = endPeriod,
         weekPattern = weekPattern,
+        skipWeekPattern = skipWeekPattern,
         rawText = rawText,
         sourceConfidence = sourceConfidence,
     )

@@ -12,7 +12,7 @@ import com.sb.courselist.data.local.entity.ScheduleEntity
 
 @Database(
     entities = [ScheduleEntity::class, CourseEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class CourseDatabase : RoomDatabase() {
@@ -29,7 +29,7 @@ abstract class CourseDatabase : RoomDatabase() {
                     CourseDatabase::class.java,
                     "course_list.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { db ->
                     INSTANCE = db
@@ -57,6 +57,14 @@ abstract class CourseDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "ALTER TABLE courses ADD COLUMN note TEXT NOT NULL DEFAULT ''",
+                )
+            }
+        }
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE courses ADD COLUMN skipWeekPattern TEXT NOT NULL DEFAULT ''",
                 )
             }
         }
