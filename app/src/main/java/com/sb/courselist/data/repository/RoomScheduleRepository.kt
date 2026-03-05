@@ -52,6 +52,11 @@ class RoomScheduleRepository(
         dao.insertCourse(entry.toEntity(scheduleId = entry.scheduleId))
     }
 
+    override suspend fun deleteCourse(courseId: Long) {
+        if (courseId <= 0L) return
+        dao.deleteCourseById(courseId)
+    }
+
     override suspend fun updateCourse(entry: CourseEntry) {
         if (entry.id <= 0L || entry.scheduleId <= 0L) return
         dao.updateCourse(entry.toEntity(scheduleId = entry.scheduleId))

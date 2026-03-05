@@ -84,24 +84,45 @@ internal fun buildPeriodTimeDisplayMap(
         .mapValues { (_, value) -> value.trim() }
         .toMutableMap()
     if (safeParsed.isEmpty()) {
-        safeParsed.putAll(DEFAULT_PERIOD_TIME_MAP)
-    } else {
-        (1..periodCount).forEach { period ->
-            val current = safeParsed[period].orEmpty()
-            if (!isValidTimeRange(current) && DEFAULT_PERIOD_TIME_MAP.containsKey(period)) {
-                safeParsed[period] = DEFAULT_PERIOD_TIME_MAP[period].orEmpty()
-            }
+        return (1..periodCount).associateWith { "" }
+    }
+
+    val validated = mutableMapOf<Int, String>()
+    var previousStart = -1
+    (1..periodCount).forEach { period ->
+        val current = safeParsed[period].orEmpty()
+        val parsedRange = parseTimeRange(current) ?: return@forEach
+        val valid = isPlausibleRangeForPeriod(period, parsedRange)
+        val inOrder = previousStart < 0 || parsedRange.first + PERIOD_ORDER_TOLERANCE_MIN >= previousStart
+        if (valid && inOrder) {
+            validated[period] = current
+            previousStart = parsedRange.first
         }
     }
-    return (1..periodCount).associateWith { period -> safeParsed[period].orEmpty() }
+    return (1..periodCount).associateWith { period -> validated[period].orEmpty() }
 }
 
-private fun isValidTimeRange(text: String): Boolean {
+private fun parseTimeRange(text: String): Pair<Int, Int>? {
     val values = TIME_VALUE_REGEX.findAll(text).map { it.value }.toList()
-    if (values.size != 2) return false
-    val start = parseMinutes(values[0]) ?: return false
-    val end = parseMinutes(values[1]) ?: return false
-    return end > start
+    if (values.size != 2) return null
+    val start = parseMinutes(values[0]) ?: return null
+    val end = parseMinutes(values[1]) ?: return null
+    if (end <= start) return null
+    return start to end
+}
+
+private fun isPlausibleRangeForPeriod(
+    period: Int,
+    range: Pair<Int, Int>,
+): Boolean {
+    val start = range.first
+    val end = range.second
+    val duration = end - start
+    if (duration !in PERIOD_MIN_DURATION_MIN..PERIOD_MAX_DURATION_MIN) return false
+    if (start !in PERIOD_START_LOWER_BOUND_MIN..PERIOD_START_UPPER_BOUND_MIN) return false
+    if (period <= 2 && start > FIRST_TWO_PERIOD_MAX_START_MIN) return false
+    if (period <= 4 && start > FIRST_FOUR_PERIOD_MAX_START_MIN) return false
+    return true
 }
 
 private fun parseMinutes(text: String): Int? {
@@ -161,20 +182,10 @@ private val WEEK_NUMBER_REGEX = Regex("(\\d{1,2})(?:-(\\d{1,2}))?")
 private val ODD_MARKERS = listOf("\u5355", "odd")
 private val EVEN_MARKERS = listOf("\u53cc", "even")
 private val TIME_VALUE_REGEX = Regex("\\d{1,2}:\\d{2}")
-
-private val DEFAULT_PERIOD_TIME_MAP = mapOf(
-    1 to "08:00-08:45",
-    2 to "08:55-09:40",
-    3 to "10:05-10:50",
-    4 to "11:00-11:45",
-    5 to "14:00-14:45",
-    6 to "14:55-15:40",
-    7 to "16:05-16:50",
-    8 to "17:00-17:45",
-    9 to "19:00-19:45",
-    10 to "19:55-20:40",
-    11 to "20:50-21:35",
-    12 to "21:40-22:25",
-    13 to "22:30-23:15",
-    14 to "23:20-00:05",
-)
+private const val PERIOD_MIN_DURATION_MIN = 25
+private const val PERIOD_MAX_DURATION_MIN = 130
+private const val PERIOD_START_LOWER_BOUND_MIN = 5 * 60
+private const val PERIOD_START_UPPER_BOUND_MIN = 23 * 60
+private const val FIRST_TWO_PERIOD_MAX_START_MIN = 12 * 60
+private const val FIRST_FOUR_PERIOD_MAX_START_MIN = 15 * 60
+private const val PERIOD_ORDER_TOLERANCE_MIN = 15

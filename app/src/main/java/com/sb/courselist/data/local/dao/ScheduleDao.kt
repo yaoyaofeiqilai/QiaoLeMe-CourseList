@@ -29,6 +29,9 @@ interface ScheduleDao {
     @Query("DELETE FROM courses WHERE scheduleId = :scheduleId")
     suspend fun deleteCoursesForSchedule(scheduleId: Long)
 
+    @Query("DELETE FROM courses WHERE id = :courseId")
+    suspend fun deleteCourseById(courseId: Long)
+
     @Update
     suspend fun updateCourse(course: CourseEntity)
 }

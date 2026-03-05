@@ -39,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,14 +71,23 @@ import java.util.Locale
 @Composable
 fun ImportScreen(
     uiState: CourseListUiState,
-    onImportSelected: (Uri, String?, Long) -> Unit,
-    onSavePreview: () -> Unit,
+    onImportSelected: (Uri, String?) -> Unit,
+    onSavePreview: (Long?) -> Unit,
     onUpdatePreviewCourse: (CourseEntry) -> Unit,
     onClearPreview: () -> Unit,
 ) {
     val context = LocalContext.current
-    var termStartEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault()) }
+    var termStartEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var editingCourse by remember { mutableStateOf<CourseEntry?>(null) }
+
+    val preview = uiState.previewSchedule
+    LaunchedEffect(preview?.meta?.termStartEpochDay) {
+        val importedTermStart = preview?.meta?.termStartEpochDay ?: 0L
+        if (termStartEpochDay == null && importedTermStart > 0L) {
+            termStartEpochDay = importedTermStart
+        }
+    }
 
     fun showTermStartDateDialog() {
         val initial = termStartEpochDay?.let { LocalDate.ofEpochDay(it) } ?: LocalDate.now()
@@ -94,7 +104,6 @@ fun ImportScreen(
 
     val launcher = rememberLauncherForActivityResult(OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val startEpoch = termStartEpochDay ?: return@rememberLauncherForActivityResult
         runCatching {
             context.contentResolver.takePersistableUriPermission(
                 uri,
@@ -102,19 +111,13 @@ fun ImportScreen(
             )
         }
         val fileName = DocumentFile.fromSingleUri(context, uri)?.name ?: uri.lastPathSegment
-        onImportSelected(uri, fileName, startEpoch)
+        onImportSelected(uri, fileName)
     }
-
-    var editingCourse by remember { mutableStateOf<CourseEntry?>(null) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(MintBg, Color(0xFFF6FBFF)),
-                ),
-            ),
+            .background(Brush.verticalGradient(colors = listOf(MintBg, Color(0xFFF6FBFF)))),
     ) {
         Column(
             modifier = Modifier
@@ -127,7 +130,6 @@ fun ImportScreen(
                 fileName = uiState.selectedFileName,
                 isParsing = uiState.isParsing,
                 termStartDateText = termStartEpochDay?.let { LocalDate.ofEpochDay(it).format(dateFormatter) },
-                canSelectPdf = termStartEpochDay != null,
                 onPickTermStartDate = ::showTermStartDateDialog,
                 onSelectPdf = { launcher.launch(arrayOf("application/pdf")) },
             )
@@ -177,7 +179,6 @@ fun ImportScreen(
                 }
             }
 
-            val preview = uiState.previewSchedule
             if (preview == null) {
                 Card(
                     shape = RoundedCornerShape(16.dp),
@@ -189,7 +190,7 @@ fun ImportScreen(
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Text(
-                            text = "导入 PDF 后可自动识别课程，并在保存前手动校对。",
+                            text = "先导入 PDF 识别课程，再设置开学日期并保存。",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -209,6 +210,32 @@ fun ImportScreen(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = if (termStartEpochDay == null) {
+                                    "开学日期：未设置"
+                                } else {
+                                    "开学日期：${LocalDate.ofEpochDay(termStartEpochDay!!).format(dateFormatter)}"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (termStartEpochDay == null) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                            TextButton(
+                                onClick = ::showTermStartDateDialog,
+                                enabled = !uiState.isSaving,
+                            ) {
+                                Text("设置开学日期")
+                            }
+                        }
+
                         preview.courses.forEachIndexed { index, course ->
                             PreviewCourseCard(
                                 course = course,
@@ -218,14 +245,15 @@ fun ImportScreen(
                                 HorizontalDivider(color = BorderMint)
                             }
                         }
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             ElevatedButton(
-                                onClick = onSavePreview,
+                                onClick = { onSavePreview(termStartEpochDay) },
                                 modifier = Modifier.weight(1f),
-                                enabled = !uiState.isSaving,
+                                enabled = !uiState.isSaving && termStartEpochDay != null,
                             ) {
                                 Icon(Icons.Rounded.Save, contentDescription = null)
                                 Text(" 保存")
@@ -261,7 +289,6 @@ private fun HeroImportCard(
     fileName: String?,
     isParsing: Boolean,
     termStartDateText: String?,
-    canSelectPdf: Boolean,
     onPickTermStartDate: () -> Unit,
     onSelectPdf: () -> Unit,
 ) {
@@ -308,35 +335,31 @@ private fun HeroImportCard(
                         style = MaterialTheme.typography.titleLarge,
                     )
                     Text(
-                        text = "优先文本解析，必要时 OCR 兜底。",
+                        text = "先识别课程，再设置开学日期并保存。",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
+
+            ElevatedButton(
+                onClick = onSelectPdf,
+                enabled = !isParsing,
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(Icons.Rounded.FileOpen, contentDescription = null)
+                Text(" 选择 PDF")
+            }
+
             ElevatedButton(
                 onClick = onPickTermStartDate,
                 enabled = !isParsing,
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Text(
-                    text = if (termStartDateText == null) "设置开学日期" else "开学日期：$termStartDateText",
+                    text = if (termStartDateText == null) "设置开学日期（可稍后）" else "开学日期：$termStartDateText",
                 )
             }
-            ElevatedButton(
-                onClick = onSelectPdf,
-                enabled = !isParsing && canSelectPdf,
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Icon(Icons.Rounded.FileOpen, contentDescription = null)
-                Text(" 选择 PDF")
-            }
-            if (!canSelectPdf) {
-                Text(
-                    text = "请先设置开学日期，再导入课表。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+
             if (!fileName.isNullOrBlank()) {
                 Text(
                     text = "当前文件：$fileName",
@@ -431,6 +454,7 @@ private fun EditCourseDialog(
     var location by remember(course.id) { mutableStateOf(course.location) }
     var teacher by remember(course.id) { mutableStateOf(course.teacher) }
     var note by remember(course.id) { mutableStateOf(course.note) }
+    var weekPattern by remember(course.id) { mutableStateOf(course.weekPattern) }
     var day by remember(course.id) { mutableStateOf(course.dayOfWeek.toString()) }
     var start by remember(course.id) { mutableStateOf(course.startPeriod.toString()) }
     var end by remember(course.id) { mutableStateOf(course.endPeriod.toString()) }
@@ -465,26 +489,32 @@ private fun EditCourseDialog(
                     minLines = 2,
                     maxLines = 4,
                 )
+                OutlinedTextField(
+                    value = weekPattern,
+                    onValueChange = { weekPattern = it },
+                    label = { Text("周次（如 1-16周）") },
+                    singleLine = true,
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = day,
                         onValueChange = { day = it },
                         label = { Text("星期(1-7)") },
-                        modifier = Modifier.width(120.dp),
+                        modifier = Modifier.width(110.dp),
                         singleLine = true,
                     )
                     OutlinedTextField(
                         value = start,
                         onValueChange = { start = it },
                         label = { Text("开始节") },
-                        modifier = Modifier.width(120.dp),
+                        modifier = Modifier.width(110.dp),
                         singleLine = true,
                     )
                     OutlinedTextField(
                         value = end,
                         onValueChange = { end = it },
                         label = { Text("结束节") },
-                        modifier = Modifier.width(120.dp),
+                        modifier = Modifier.width(110.dp),
                         singleLine = true,
                     )
                 }
@@ -499,9 +529,10 @@ private fun EditCourseDialog(
                     onConfirm(
                         course.copy(
                             name = name.ifBlank { course.name },
-                            location = location,
-                            teacher = teacher,
+                            location = location.trim(),
+                            teacher = teacher.trim(),
                             note = note.trim(),
+                            weekPattern = weekPattern.ifBlank { course.weekPattern },
                             dayOfWeek = dayValue,
                             startPeriod = startValue,
                             endPeriod = endValue,

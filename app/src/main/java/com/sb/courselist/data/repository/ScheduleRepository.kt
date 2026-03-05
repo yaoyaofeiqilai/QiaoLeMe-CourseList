@@ -11,5 +11,6 @@ interface ScheduleRepository {
     suspend fun importAndParse(uri: Uri): ParseResult
     suspend fun saveSchedule(schedule: ParsedSchedule)
     suspend fun addCourse(entry: CourseEntry)
+    suspend fun deleteCourse(courseId: Long)
     suspend fun updateCourse(entry: CourseEntry)
 }

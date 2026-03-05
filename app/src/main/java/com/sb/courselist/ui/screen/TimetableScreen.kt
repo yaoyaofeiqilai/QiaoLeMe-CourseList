@@ -71,6 +71,7 @@ fun TimetableScreen(
     schedule: ParsedSchedule?,
     onNavigateImport: () -> Unit,
     onAddCourse: (CourseEntry) -> Unit,
+    onDeleteCourse: (Long) -> Unit,
     onUpdateCourse: (CourseEntry) -> Unit,
 ) {
     var editingCourse by remember(schedule?.meta?.id) { mutableStateOf<CourseEntry?>(null) }
@@ -96,6 +97,7 @@ fun TimetableScreen(
         mutableStateOf(currentWeek)
     }
     var creatingCourse by remember(schedule.meta.id) { mutableStateOf<CourseEntry?>(null) }
+    var deletingCourse by remember(schedule.meta.id) { mutableStateOf<CourseEntry?>(null) }
 
     val visibleCourses = remember(schedule.courses, selectedWeek) {
         filterCoursesByWeek(schedule.courses, selectedWeek)
@@ -183,7 +185,12 @@ fun TimetableScreen(
     editingCourse?.let { course ->
         EditPersistedCourseDialog(
             course = course,
+            showDeleteAction = true,
             onDismiss = { editingCourse = null },
+            onRequestDelete = {
+                deletingCourse = course
+                editingCourse = null
+            },
             onConfirm = { updated ->
                 onUpdateCourse(updated)
                 editingCourse = null
@@ -207,6 +214,27 @@ fun TimetableScreen(
                     ),
                 )
                 creatingCourse = null
+            },
+        )
+    }
+
+    deletingCourse?.let { course ->
+        DeleteWeekCourseDialog(
+            courseName = course.name,
+            selectedWeek = selectedWeek,
+            onDismiss = { deletingCourse = null },
+            onConfirmDelete = {
+                val updatedWeekPattern = removeWeekFromPattern(
+                    weekPattern = course.weekPattern,
+                    weekToRemove = selectedWeek,
+                    totalWeeks = totalWeeks,
+                )
+                if (updatedWeekPattern == null) {
+                    onDeleteCourse(course.id)
+                } else {
+                    onUpdateCourse(course.copy(weekPattern = updatedWeekPattern))
+                }
+                deletingCourse = null
             },
         )
     }
@@ -242,22 +270,19 @@ private fun WeekHeroCard(
                 )
                 .padding(16.dp),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Text(
-                        text = displayTermName(schedule.meta.termName),
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontFamily = ArtHeadlineFamily,
-                        ),
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    ManualEditPencilButton(onClick = onAddManualCourse)
-                }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = 72.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = displayTermName(schedule.meta.termName),
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = ArtHeadlineFamily,
+                    ),
+                    fontWeight = FontWeight.Bold,
+                )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -303,15 +328,23 @@ private fun WeekHeroCard(
                     }
                 }
             }
+            ManualEditPencilButton(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 2.dp, bottom = 2.dp),
+                onClick = onAddManualCourse,
+            )
         }
     }
 }
 
 @Composable
 private fun ManualEditPencilButton(
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Column(
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
@@ -903,8 +936,10 @@ private fun EmptyTimetable(
 private fun EditPersistedCourseDialog(
     course: CourseEntry,
     dialogTitle: String = "编辑课程",
-    confirmLabel: String = "保存",
+    confirmLabel: String = "\u4fdd\u5b58",
+    showDeleteAction: Boolean = false,
     onDismiss: () -> Unit,
+    onRequestDelete: (() -> Unit)? = null,
     onConfirm: (CourseEntry) -> Unit,
 ) {
     var name by remember(course.id) { mutableStateOf(course.name) }
@@ -915,6 +950,23 @@ private fun EditPersistedCourseDialog(
     var start by remember(course.id) { mutableStateOf(course.startPeriod.toString()) }
     var end by remember(course.id) { mutableStateOf(course.endPeriod.toString()) }
     var weekPattern by remember(course.id) { mutableStateOf(course.weekPattern) }
+    val onSave = {
+        val dayValue = day.toIntOrNull()?.coerceIn(1, 7) ?: course.dayOfWeek
+        val startValue = start.toIntOrNull()?.coerceIn(1, 14) ?: course.startPeriod
+        val endValue = end.toIntOrNull()?.coerceIn(startValue, 14) ?: course.endPeriod
+        onConfirm(
+            course.copy(
+                name = name.ifBlank { course.name },
+                location = location,
+                teacher = teacher,
+                note = note.trim(),
+                weekPattern = weekPattern.ifBlank { course.weekPattern },
+                dayOfWeek = dayValue,
+                startPeriod = startValue,
+                endPeriod = endValue,
+            ),
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -977,31 +1029,49 @@ private fun EditPersistedCourseDialog(
                 }
             }
         },
+        confirmButton = {},
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (showDeleteAction && onRequestDelete != null) {
+                    TextButton(onClick = onRequestDelete) {
+                        Text(
+                            text = "\u5220\u9664",
+                            color = Color(0xFFD94141),
+                        )
+                    }
+                }
+                TextButton(onClick = onDismiss) { Text("\u53d6\u6d88") }
+                TextButton(onClick = onSave) { Text(confirmLabel) }
+            }
+        },
+    )
+}
+
+@Composable
+private fun DeleteWeekCourseDialog(
+    courseName: String,
+    selectedWeek: Int,
+    onDismiss: () -> Unit,
+    onConfirmDelete: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("删除课程") },
+        text = {
+            Text(
+                text = "确定删除“$courseName”在第${selectedWeek}周的记录吗？其他周不会受影响。",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    val dayValue = day.toIntOrNull()?.coerceIn(1, 7) ?: course.dayOfWeek
-                    val startValue = start.toIntOrNull()?.coerceIn(1, 14) ?: course.startPeriod
-                    val endValue = end.toIntOrNull()?.coerceIn(startValue, 14) ?: course.endPeriod
-                    onConfirm(
-                        course.copy(
-                            name = name.ifBlank { course.name },
-                            location = location,
-                            teacher = teacher,
-                            note = note.trim(),
-                            weekPattern = weekPattern.ifBlank { course.weekPattern },
-                            dayOfWeek = dayValue,
-                            startPeriod = startValue,
-                            endPeriod = endValue,
-                        ),
-                    )
-                },
-            ) {
-                Text(confirmLabel)
+            TextButton(onClick = onConfirmDelete) {
+                Text("\u5220\u9664")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
         },
     )
 }
@@ -1066,6 +1136,39 @@ private fun buildManualCourseDraft(
         rawText = "manual-edit",
         sourceConfidence = 1f,
     )
+}
+
+private fun removeWeekFromPattern(
+    weekPattern: String,
+    weekToRemove: Int,
+    totalWeeks: Int,
+): String? {
+    if (weekToRemove <= 0 || totalWeeks <= 0) return weekPattern
+    val keptWeeks = (1..totalWeeks)
+        .filter { week -> week != weekToRemove && isCourseInWeek(weekPattern, week) }
+    if (keptWeeks.isEmpty()) return null
+    if (keptWeeks.size == totalWeeks) return "all"
+    return toCompactWeekPattern(keptWeeks)
+}
+
+private fun toCompactWeekPattern(weeks: List<Int>): String {
+    if (weeks.isEmpty()) return ""
+    val sorted = weeks.distinct().sorted()
+    val parts = mutableListOf<String>()
+    var start = sorted.first()
+    var end = sorted.first()
+
+    sorted.drop(1).forEach { week ->
+        if (week == end + 1) {
+            end = week
+        } else {
+            parts += if (start == end) start.toString() else "$start-$end"
+            start = week
+            end = week
+        }
+    }
+    parts += if (start == end) start.toString() else "$start-$end"
+    return parts.joinToString(separator = ",")
 }
 
 private fun axisTimeLabel(raw: String): String {

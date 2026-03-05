@@ -99,6 +99,7 @@ fun CourseListApp(viewModel: CourseListViewModel) {
                         schedule = uiState.currentSchedule,
                         onNavigateImport = { viewModel.switchTab(BottomTab.IMPORT) },
                         onAddCourse = viewModel::addPersistedCourse,
+                        onDeleteCourse = viewModel::deletePersistedCourse,
                         onUpdateCourse = viewModel::updatePersistedCourse,
                     )
 

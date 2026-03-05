@@ -60,19 +60,19 @@ class WeekScheduleUtilsTest {
     }
 
     @Test
-    fun buildPeriodTimeDisplayMap_fallsBackWhenRangeInvalid() {
+    fun buildPeriodTimeDisplayMap_keepsOnlyValidatedParsedRanges() {
         val result = buildPeriodTimeDisplayMap(
             parsed = mapOf(
                 1 to "13:35-14:20",
                 2 to "18:20",
-                10 to "10:05",
+                10 to "19:10-19:55",
             ),
             periodCount = 10,
         )
 
-        assertEquals("13:35-14:20", result[1])
-        assertEquals("08:55-09:40", result[2])
-        assertEquals("19:55-20:40", result[10])
+        assertEquals("", result[1])
+        assertEquals("", result[2])
+        assertEquals("19:10-19:55", result[10])
     }
 
     @Test

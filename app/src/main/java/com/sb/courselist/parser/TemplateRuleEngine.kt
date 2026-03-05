@@ -84,7 +84,7 @@ class TemplateRuleEngine {
 
         if (courses.isEmpty()) return null
 
-        val periodTimes = extractPeriodTimes(normalizedTokens)
+        val periodTimes = extractBestPeriodTimes(byPage)
 
         logInfo(
             "parse: source=$sourceTag tokens=${normalizedTokens.size} pages=${byPage.size} courses=${courses.size}",
@@ -593,20 +593,36 @@ class TemplateRuleEngine {
         val width = (maxX - minX).coerceAtLeast(1f)
         val fallbackAxisRight = minX + width * PERIOD_AXIS_X_RATIO
         val dayAnchors = extractDayAnchors(tokens)
+        val axisTop = if (dayAnchors.size >= 5) {
+            dayAnchors.maxOf { it.bottom } + PERIOD_AXIS_HEADER_GAP
+        } else {
+            tokens.minOf { it.y } - PERIOD_AXIS_TOP_FUZZ
+        }
         val axisRight = dayAnchors.minOfOrNull { it.x }?.minus(PERIOD_AXIS_RIGHT_MARGIN)
             ?.coerceAtLeast(minX + PERIOD_AXIS_MIN_WIDTH)
             ?: fallbackAxisRight
 
-        val anchorsByPeriod = tokens
+        val periodCandidates = tokens
             .asSequence()
-            .filter { token -> token.x <= axisRight + PERIOD_AXIS_TOKEN_PAD }
+            .filter { token ->
+                token.x <= axisRight + PERIOD_AXIS_TOKEN_PAD &&
+                    token.y >= axisTop
+            }
             .mapNotNull { token ->
                 val value = token.text.toIntOrNull() ?: return@mapNotNull null
                 if (value !in 1..14) return@mapNotNull null
                 PeriodAnchorForTime(period = value, x = token.x, y = token.y)
             }
+            .toList()
+        if (periodCandidates.isEmpty()) return emptyMap()
+
+        val minAnchorX = periodCandidates.minOf { it.x }
+        val clustered = periodCandidates.filter { it.x <= minAnchorX + PERIOD_ANCHOR_CLUSTER_X_SPREAD }
+        val candidatesForGrouping = if (clustered.size >= 2) clustered else periodCandidates
+
+        val anchorsByPeriod = candidatesForGrouping
             .groupBy { it.period }
-            .mapValues { (_, anchors) -> anchors.minWithOrNull(compareBy<PeriodAnchorForTime> { it.x }.thenBy { it.y }) }
+            .mapValues { (_, anchors) -> anchors.minWithOrNull(compareBy<PeriodAnchorForTime> { it.y }.thenBy { it.x }) }
             .mapNotNull { (period, anchor) -> anchor?.let { period to it } }
             .toMap()
         if (anchorsByPeriod.isEmpty()) return emptyMap()
@@ -614,7 +630,10 @@ class TemplateRuleEngine {
 
         val timeTokens = tokens
             .asSequence()
-            .filter { token -> token.x <= axisRight + PERIOD_AXIS_TIME_X_PAD }
+            .filter { token ->
+                token.x <= axisRight + PERIOD_AXIS_TIME_X_PAD &&
+                    token.y >= axisTop
+            }
             .mapNotNull { token ->
                 val times = TIME_REGEX.findAll(token.text).map { match -> match.value }.toList()
                 if (times.isEmpty()) return@mapNotNull null
@@ -623,37 +642,26 @@ class TemplateRuleEngine {
             .toList()
         if (timeTokens.isEmpty()) return emptyMap()
 
-        val gaps = anchors
-            .zipWithNext { a, b -> b.y - a.y }
-            .filter { it > 6f }
-        val avgGap = if (gaps.isNotEmpty()) {
-            gaps.average().toFloat()
-        } else {
-            PERIOD_TIME_FALLBACK_GAP
-        }
-
         val result = sortedMapOf<Int, String>()
         anchors.forEachIndexed { index, anchor ->
-            val topBound = if (index == 0) {
-                anchor.y - avgGap * 0.35f
-            } else {
-                (anchors[index - 1].y + anchor.y) * 0.5f
-            }
+            val topBound = anchor.y - PERIOD_TIME_ABOVE_TOLERANCE
             val bottomBound = if (index == anchors.lastIndex) {
-                anchor.y + avgGap * 0.85f
+                anchor.y + PERIOD_TIME_LAST_LOOKAHEAD
             } else {
-                (anchor.y + anchors[index + 1].y) * 0.5f
+                (anchors[index + 1].y - PERIOD_TIME_NEXT_ANCHOR_MARGIN)
+                    .coerceAtLeast(anchor.y + PERIOD_TIME_MIN_WINDOW)
             }
 
             val nearTimes = timeTokens
+                .asSequence()
                 .filter { timeToken ->
-                    timeToken.y >= topBound - PERIOD_TIME_BAND_PAD &&
-                        timeToken.y <= bottomBound + PERIOD_TIME_BAND_PAD
+                    timeToken.y >= topBound && timeToken.y <= bottomBound
                 }
                 .sortedBy { it.y }
                 .flatMap { it.values }
                 .distinct()
                 .take(2)
+                .toList()
             if (nearTimes.size >= 2) {
                 result[anchor.period] = "${nearTimes[0]}-${nearTimes[1]}"
             } else if (nearTimes.size == 1) {
@@ -661,6 +669,23 @@ class TemplateRuleEngine {
             }
         }
         return sanitizePeriodTimes(result)
+    }
+
+    private fun extractBestPeriodTimes(
+        byPage: Map<Int, List<TextToken>>,
+    ): Map<Int, String> {
+        if (byPage.isEmpty()) return emptyMap()
+
+        val merged = sortedMapOf<Int, String>()
+        byPage.toSortedMap().values.forEach { pageTokens ->
+            extractPeriodTimes(pageTokens).toSortedMap().forEach { (period, value) ->
+                if (merged[period].isNullOrBlank()) {
+                    merged[period] = value
+                }
+            }
+        }
+        val sanitizedMerged = sanitizePeriodTimes(merged)
+        return sanitizedMerged
     }
 
     private fun sanitizePeriodTimes(input: Map<Int, String>): Map<Int, String> {
@@ -751,8 +776,13 @@ class TemplateRuleEngine {
         private const val PERIOD_AXIS_MIN_WIDTH = 34f
         private const val PERIOD_AXIS_TOKEN_PAD = 12f
         private const val PERIOD_AXIS_TIME_X_PAD = 90f
-        private const val PERIOD_TIME_BAND_PAD = 2.5f
-        private const val PERIOD_TIME_FALLBACK_GAP = 58f
+        private const val PERIOD_AXIS_HEADER_GAP = 4f
+        private const val PERIOD_AXIS_TOP_FUZZ = 4f
+        private const val PERIOD_ANCHOR_CLUSTER_X_SPREAD = 28f
+        private const val PERIOD_TIME_ABOVE_TOLERANCE = 5f
+        private const val PERIOD_TIME_MIN_WINDOW = 24f
+        private const val PERIOD_TIME_NEXT_ANCHOR_MARGIN = 5f
+        private const val PERIOD_TIME_LAST_LOOKAHEAD = 240f
         private const val PERIOD_TIME_ORDER_TOLERANCE_MIN = 20
 
         private const val EN_MON = "mon"

@@ -38,7 +38,7 @@ class CourseListViewModel(
         _uiState.update { it.copy(activeTab = tab) }
     }
 
-    fun importPdf(uri: Uri, fileName: String?, termStartEpochDay: Long) {
+    fun importPdf(uri: Uri, fileName: String?) {
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
@@ -48,13 +48,13 @@ class CourseListViewModel(
                     message = null,
                 )
             }
+
             when (val result = repository.importAndParse(uri)) {
                 is ParseResult.Success -> {
-                    val scheduleWithTermStart = result.schedule.withTermStartEpochDay(termStartEpochDay)
                     _uiState.update { state ->
                         state.copy(
                             isParsing = false,
-                            previewSchedule = scheduleWithTermStart,
+                            previewSchedule = result.schedule,
                             importIssues = result.issues,
                             message = "解析完成，请核对后保存。",
                             activeTab = BottomTab.IMPORT,
@@ -63,7 +63,7 @@ class CourseListViewModel(
                 }
 
                 is ParseResult.FallbackRequired -> {
-                    val manualSchedule = buildManualSeedSchedule(result.reason, termStartEpochDay)
+                    val manualSchedule = buildManualSeedSchedule(result.reason)
                     _uiState.update { state ->
                         state.copy(
                             isParsing = false,
@@ -79,7 +79,7 @@ class CourseListViewModel(
                 }
 
                 is ParseResult.Failure -> {
-                    val manualSchedule = buildManualSeedSchedule(result.reason, termStartEpochDay)
+                    val manualSchedule = buildManualSeedSchedule(result.reason)
                     _uiState.update { state ->
                         state.copy(
                             isParsing = false,
@@ -99,11 +99,19 @@ class CourseListViewModel(
         }
     }
 
-    fun savePreviewSchedule() {
+    fun savePreviewSchedule(termStartEpochDay: Long?) {
         val preview = _uiState.value.previewSchedule ?: return
+        if (termStartEpochDay == null || termStartEpochDay <= 0L) {
+            _uiState.update { state ->
+                state.copy(message = "请先设置开学日期后再保存课表。")
+            }
+            return
+        }
+
+        val previewWithTermStart = preview.withTermStartEpochDay(termStartEpochDay)
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, message = null) }
-            repository.saveSchedule(preview)
+            repository.saveSchedule(previewWithTermStart)
             _uiState.update { state ->
                 state.copy(
                     isSaving = false,
@@ -152,7 +160,13 @@ class CourseListViewModel(
         }
     }
 
-    private fun buildManualSeedSchedule(reason: String, termStartEpochDay: Long): ParsedSchedule {
+    fun deletePersistedCourse(courseId: Long) {
+        viewModelScope.launch {
+            repository.deleteCourse(courseId)
+        }
+    }
+
+    private fun buildManualSeedSchedule(reason: String): ParsedSchedule {
         return ParsedSchedule(
             meta = ScheduleMeta(
                 termName = "手动课表",
@@ -160,7 +174,6 @@ class CourseListViewModel(
                 importedAt = System.currentTimeMillis(),
                 templateVersion = "manual-seed-v1",
                 sourceTag = "manual-fallback",
-                termStartEpochDay = termStartEpochDay,
             ),
             courses = listOf(
                 CourseEntry(
