@@ -554,26 +554,29 @@ private fun EditCourseDialog(
                     label = { Text("周次（如 1-16周）") },
                     singleLine = true,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     OutlinedTextField(
                         value = day,
                         onValueChange = { day = it },
                         label = { Text("星期(1-7)") },
-                        modifier = Modifier.width(110.dp),
+                        modifier = Modifier.weight(1f),
                         singleLine = true,
                     )
                     OutlinedTextField(
                         value = start,
                         onValueChange = { start = it },
                         label = { Text("开始节") },
-                        modifier = Modifier.width(110.dp),
+                        modifier = Modifier.weight(1f),
                         singleLine = true,
                     )
                     OutlinedTextField(
                         value = end,
                         onValueChange = { end = it },
                         label = { Text("结束节") },
-                        modifier = Modifier.width(110.dp),
+                        modifier = Modifier.weight(1f),
                         singleLine = true,
                     )
                 }

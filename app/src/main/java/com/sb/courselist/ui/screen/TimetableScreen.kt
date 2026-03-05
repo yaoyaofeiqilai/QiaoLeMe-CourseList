@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -70,11 +71,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.sb.courselist.domain.model.CourseEntry
 import com.sb.courselist.domain.model.ParsedSchedule
 import com.sb.courselist.ui.theme.ArtHeadlineFamily
-import com.sb.courselist.ui.theme.CardTitleFamily
+import com.sb.courselist.ui.theme.CardCuteMetaFamily
+import com.sb.courselist.ui.theme.CardCuteTitleFamily
 import com.sb.courselist.ui.theme.CardWhite
 import com.sb.courselist.ui.theme.PlayfulLabelFamily
 import com.sb.courselist.ui.theme.ReadableBodyFamily
@@ -185,9 +188,8 @@ fun TimetableScreen(
             } else {
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                     val compactMode = maxWidth < 430.dp
-                    val dayGap = if (compactMode) 3.dp else 8.dp
-                    val timeColumnWidth = if (compactMode) 34.dp else 50.dp
-                    val adaptiveDayWidth = (maxWidth - timeColumnWidth - dayGap * 7) / 7
+                    val dayGap = if (compactMode) 2.dp else 8.dp
+                    val timeColumnWidth = if (compactMode) 30.dp else 50.dp
 
                     WeeklyTimetableGrid(
                         courses = visibleCourses,
@@ -195,8 +197,8 @@ fun TimetableScreen(
                         periodCount = periodCount,
                         highlightedDay = highlightedDay,
                         periodTimes = periodTimes,
+                        isCompact = compactMode,
                         timeColumnWidth = timeColumnWidth,
-                        dayColumnWidth = adaptiveDayWidth,
                         dayColumnGap = dayGap,
                         modifier = Modifier.fillMaxWidth(),
                         onEditCourse = { editingCourse = it },
@@ -214,13 +216,25 @@ fun TimetableScreen(
                         onMarkSkipped = { course ->
                             val teacher = prettyTeacherName(course.teacher)
                             val location = prettyLocationName(course.location)
+                            val allSkippedAfterMark = visibleCourses.isNotEmpty() &&
+                                visibleCourses.all { weekCourse ->
+                                    if (weekCourse.id == course.id) {
+                                        true
+                                    } else {
+                                        isWeekMarkedInPattern(weekCourse.skipWeekPattern, selectedWeek)
+                                    }
+                                }
                             easterEggAchievement = EasterEggAchievement(
                                 id = System.currentTimeMillis(),
                                 type = EggAchievementType.SKIP,
-                                message = buildSkipEasterEggMessage(
-                                    teacher = teacher,
-                                    location = location,
-                                ),
+                                message = if (allSkippedAfterMark) {
+                                    ALL_SKIPPED_EASTER_EGG
+                                } else {
+                                    buildSkipEasterEggMessage(
+                                        teacher = teacher,
+                                        location = location,
+                                    )
+                                },
                             )
                             if (!isWeekMarkedInPattern(course.skipWeekPattern, selectedWeek)) {
                                 onUpdateCourse(
@@ -421,6 +435,9 @@ private fun WeekHeroCard(
                 )
                 .padding(16.dp),
         ) {
+            HeroCardDecorationLayer(
+                modifier = Modifier.matchParentSize(),
+            )
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -428,7 +445,7 @@ private fun WeekHeroCard(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = displayTermName(schedule.meta.termName),
+                    text = "\u9009\u62e9\u6027\u51fa\u52e4\u534f\u8bae",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontFamily = ArtHeadlineFamily,
                     ),
@@ -486,6 +503,48 @@ private fun WeekHeroCard(
                 onClick = onAddManualCourse,
             )
         }
+    }
+}
+
+@Composable
+private fun HeroCardDecorationLayer(
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 10.dp, y = (-10).dp)
+                .size(88.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.18f)),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-30).dp, y = 14.dp)
+                .width(48.dp)
+                .height(18.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White.copy(alpha = 0.14f)),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .offset(x = (-6).dp, y = 8.dp)
+                .width(54.dp)
+                .height(54.dp)
+                .clip(CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.28f), CircleShape),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = 8.dp, y = 10.dp)
+                .size(16.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.2f)),
+        )
     }
 }
 
@@ -620,8 +679,8 @@ private fun WeeklyTimetableGrid(
     periodCount: Int,
     highlightedDay: Int?,
     periodTimes: Map<Int, String>,
+    isCompact: Boolean,
     timeColumnWidth: Dp,
-    dayColumnWidth: Dp,
     dayColumnGap: Dp,
     modifier: Modifier = Modifier,
     onEditCourse: (CourseEntry) -> Unit,
@@ -631,7 +690,7 @@ private fun WeeklyTimetableGrid(
     onMarkSkipped: (CourseEntry) -> Unit,
     onRestoreSkipped: (CourseEntry) -> Unit,
 ) {
-    val periodHeight = 70.dp
+    val periodHeight = if (isCompact) 64.dp else 70.dp
     val periodGap = 6.dp
     val totalHeight = (periodHeight * periodCount) + (periodGap * (periodCount - 1))
 
@@ -657,7 +716,7 @@ private fun WeeklyTimetableGrid(
                     HeaderCell(
                         text = "$day\n$date",
                         highlighted = highlightedDay == dayNumber,
-                        modifier = Modifier.width(dayColumnWidth),
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
@@ -669,6 +728,7 @@ private fun WeeklyTimetableGrid(
                 TimeAxisColumn(
                     periodCount = periodCount,
                     periodTimes = periodTimes,
+                    isCompact = isCompact,
                     periodHeight = periodHeight,
                     periodGap = periodGap,
                     modifier = Modifier.width(timeColumnWidth),
@@ -676,10 +736,13 @@ private fun WeeklyTimetableGrid(
                 DAY_NUMBERS.forEach { day ->
                     DayCourseColumn(
                         dayCourses = courses.filter { it.dayOfWeek == day },
+                        compactMode = isCompact,
                         periodCount = periodCount,
                         periodHeight = periodHeight,
                         periodGap = periodGap,
-                        modifier = Modifier.width(dayColumnWidth),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
                         onEditCourse = onEditCourse,
                         isCourseSkipped = isCourseSkipped,
                         isCourseFlipped = isCourseFlipped,
@@ -697,6 +760,7 @@ private fun WeeklyTimetableGrid(
 private fun TimeAxisColumn(
     periodCount: Int,
     periodTimes: Map<Int, String>,
+    isCompact: Boolean,
     periodHeight: Dp,
     periodGap: Dp,
     modifier: Modifier = Modifier,
@@ -720,9 +784,17 @@ private fun TimeAxisColumn(
                 ) {
                     Text(
                         text = period.toString(),
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontFamily = PlayfulLabelFamily,
-                        ),
+                        style = if (isCompact) {
+                            MaterialTheme.typography.labelMedium.copy(
+                                fontFamily = ReadableBodyFamily,
+                                fontSize = 11.sp,
+                                lineHeight = 12.sp,
+                            )
+                        } else {
+                            MaterialTheme.typography.labelLarge.copy(
+                                fontFamily = PlayfulLabelFamily,
+                            )
+                        },
                         color = Color(0xFF4A627B),
                         fontWeight = FontWeight.Bold,
                     )
@@ -732,6 +804,8 @@ private fun TimeAxisColumn(
                             text = axisTimeLabel(timeText),
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontFamily = ReadableBodyFamily,
+                                fontSize = if (isCompact) 10.sp else 12.sp,
+                                lineHeight = if (isCompact) 11.sp else 16.sp,
                             ),
                             color = Color(0xFF637A91),
                             textAlign = TextAlign.Center,
@@ -748,6 +822,7 @@ private fun TimeAxisColumn(
 @OptIn(ExperimentalFoundationApi::class)
 private fun DayCourseColumn(
     dayCourses: List<CourseEntry>,
+    compactMode: Boolean,
     periodCount: Int,
     periodHeight: Dp,
     periodGap: Dp,
@@ -809,16 +884,38 @@ private fun DayCourseColumn(
             }
             val titleColor = if (isSkipped) Color(0xFF535E6E) else style.titleColor
             val metaColor = if (isSkipped) Color(0xFF667487) else style.metaColor
+            val outerHorizontalPadding = if (compactMode) 0.dp else 2.dp
+            val innerHorizontalPadding = if (compactMode) 2.dp else 7.dp
+            val innerVerticalPadding = if (compactMode) 2.dp else 7.dp
+            val compactTitleStyle = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = CardCuteTitleFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                lineHeight = 12.sp,
+            )
+            val compactMetaStyle = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = CardCuteMetaFamily,
+                fontSize = 10.sp,
+                lineHeight = 11.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            val compactAlignCenter = compactMode && span <= 3
+            val compactHorizontalAlignment = if (compactAlignCenter) Alignment.CenterHorizontally else Alignment.Start
+            val compactTextAlign = if (compactAlignCenter) TextAlign.Center else TextAlign.Start
 
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 2.dp)
+                    .padding(horizontal = outerHorizontalPadding)
                     .offset(y = topOffset)
                     .fillMaxWidth()
                     .height(cardHeight)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(if (compactMode) 10.dp else 14.dp))
                     .background(cardBrush)
-                    .border(1.dp, Color.White.copy(alpha = 0.88f), RoundedCornerShape(14.dp))
+                    .border(
+                        1.dp,
+                        Color.White.copy(alpha = 0.88f),
+                        RoundedCornerShape(if (compactMode) 10.dp else 14.dp),
+                    )
                     .combinedClickable(
                         onClick = {
                             if (isFlipped) {
@@ -833,7 +930,7 @@ private fun DayCourseColumn(
                         this.rotationY = rotationY
                         cameraDistance = with(density) { 18.dp.toPx() }
                     }
-                    .padding(horizontal = 7.dp, vertical = 7.dp),
+                    .padding(horizontal = innerHorizontalPadding, vertical = innerVerticalPadding),
             ) {
                 if (showBack) {
                     Box(
@@ -844,11 +941,12 @@ private fun DayCourseColumn(
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(if (compactMode) 6.dp else 8.dp),
                         ) {
                             ColorfulEggLabel()
                             FlipActionButton(
                                 label = if (isSkipped) "\u6211\u7231\u5b66\u4e60" else "\u7fd8\u4e86",
+                                compactMode = compactMode,
                                 textPalette = if (isSkipped) {
                                     listOf(
                                         Color(0xFF1B7B5B),
@@ -888,23 +986,57 @@ private fun DayCourseColumn(
                         profile = style.decorationProfile,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .offset(x = 12.dp, y = (-12).dp),
+                            .offset(
+                                x = if (compactMode) 8.dp else 12.dp,
+                                y = if (compactMode) (-8).dp else (-12).dp,
+                            )
+                            .graphicsLayer {
+                                if (compactMode) {
+                                    scaleX = 0.62f
+                                    scaleY = 0.62f
+                                    alpha = 0.9f
+                                }
+                            },
                     )
                     Column(
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                        horizontalAlignment = if (compactMode) compactHorizontalAlignment else Alignment.Start,
+                        verticalArrangement = if (compactMode) {
+                            Arrangement.Center
+                        } else {
+                            Arrangement.spacedBy(3.dp)
+                        },
                     ) {
                         Text(
                             text = course.name,
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontFamily = CardTitleFamily,
-                            ),
+                            style = if (compactMode) {
+                                compactTitleStyle
+                            } else {
+                                MaterialTheme.typography.labelLarge.copy(
+                                    fontFamily = CardCuteTitleFamily,
+                                )
+                            },
                             fontWeight = FontWeight.Bold,
                             color = titleColor,
-                            maxLines = if (span >= 3) 3 else 2,
+                            maxLines = when {
+                                compactMode && span >= 4 -> 4
+                                compactMode && span == 3 -> 3
+                                compactMode && span == 1 -> 1
+                                compactMode -> 2
+                                span >= 3 -> 3
+                                else -> 2
+                            },
                             overflow = TextOverflow.Ellipsis,
-                            textAlign = if (span == 1) TextAlign.Center else TextAlign.Start,
-                            modifier = if (span == 1) {
+                            textAlign = if (compactMode) {
+                                compactTextAlign
+                            } else if (span == 1) {
+                                TextAlign.Center
+                            } else {
+                                TextAlign.Start
+                            },
+                            modifier = if (compactMode) {
+                                Modifier.fillMaxWidth()
+                            } else if (span == 1) {
                                 Modifier
                                     .fillMaxWidth()
                                     .wrapContentHeight()
@@ -915,49 +1047,72 @@ private fun DayCourseColumn(
                                     .padding(top = if (span >= 2) 8.dp else 2.dp)
                             },
                         )
-                        if (span > 1) {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        if (span > 1 || (compactMode && span == 1)) {
+                            if (compactMode && span == 1) {
+                                val singleMeta = listOf(
+                                    course.location.trim(),
+                                    course.teacher.trim(),
+                                ).filter { it.isNotBlank() }
+                                    .joinToString("\u00b7")
+                                    .ifBlank { "\u5f85\u8865\u5145" }
                                 Text(
-                                    text = course.location.ifBlank { "\u5f85\u8865\u5145" },
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = ReadableBodyFamily,
-                                    ),
+                                    text = singleMeta,
+                                    style = compactMetaStyle,
                                     color = metaColor,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
+                                    textAlign = compactTextAlign,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
-                                if (span >= 2) {
+                            } else {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(if (compactMode) 1.dp else 2.dp),
+                                    horizontalAlignment = if (compactMode) compactHorizontalAlignment else Alignment.Start,
+                                ) {
                                     Text(
-                                        text = course.teacher.ifBlank { "\u5f85\u8865\u5145" },
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontFamily = ReadableBodyFamily,
+                                        text = course.location.ifBlank { "\u5f85\u8865\u5145" },
+                                        style = if (compactMode) compactMetaStyle else MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = CardCuteMetaFamily,
                                         ),
                                         color = metaColor,
-                                        maxLines = 1,
+                                        maxLines = if (compactMode) 2 else 1,
                                         overflow = TextOverflow.Ellipsis,
+                                        textAlign = if (compactMode) compactTextAlign else TextAlign.Start,
                                     )
-                                }
-                                if (course.note.isNotBlank()) {
-                                    Text(
-                                        text = course.note,
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontFamily = ReadableBodyFamily,
-                                        ),
-                                        color = metaColor.copy(alpha = 0.92f),
-                                        maxLines = if (span >= 4) 2 else 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                    if (span >= 2) {
+                                        Text(
+                                            text = course.teacher.ifBlank { "\u5f85\u8865\u5145" },
+                                            style = if (compactMode) compactMetaStyle else MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = CardCuteMetaFamily,
+                                            ),
+                                            color = metaColor,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = if (compactMode) compactTextAlign else TextAlign.Start,
+                                        )
+                                    }
+                                    if (!compactMode && course.note.isNotBlank()) {
+                                        Text(
+                                            text = course.note,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = CardCuteMetaFamily,
+                                            ),
+                                            color = metaColor.copy(alpha = 0.92f),
+                                            maxLines = if (span >= 4) 2 else 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                     if (isSkipped) {
                         SkippedStampOverlay(
-                            span = span,
+                            compactMode = compactMode,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .offset(y = (-2).dp)
-                                .fillMaxWidth(0.96f)
+                                .offset(y = if (compactMode) (-2).dp else (-3).dp)
                                 .zIndex(5f),
                         )
                     }
@@ -996,120 +1151,100 @@ private fun ColorfulEggLabel() {
 @Composable
 private fun FlipActionButton(
     label: String,
+    compactMode: Boolean,
     textPalette: List<Color>,
     background: List<Color>,
     onClick: () -> Unit,
 ) {
+    val useVerticalLabel = compactMode && (label == "\u7fd8\u4e86" || label == "\u6211\u7231\u5b66\u4e60")
+    val displayLabel = if (useVerticalLabel) {
+        label.toCharArray().joinToString(separator = "\n")
+    } else {
+        label
+    }
     val coloredText = buildAnnotatedString {
-        label.forEachIndexed { index, ch ->
-            withStyle(
-                SpanStyle(
-                    color = textPalette[index % textPalette.size],
-                    fontWeight = FontWeight.ExtraBold,
-                ),
-            ) {
+        var colorIndex = 0
+        displayLabel.forEach { ch ->
+            if (ch == '\n') {
                 append(ch)
+            } else {
+                withStyle(
+                    SpanStyle(
+                        color = textPalette[colorIndex % textPalette.size],
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                ) {
+                    append(ch)
+                }
+                colorIndex += 1
             }
         }
     }
     Box(
         modifier = Modifier
+            .widthIn(min = if (useVerticalLabel) 42.dp else 64.dp)
             .clip(RoundedCornerShape(999.dp))
             .background(Brush.horizontalGradient(colors = background))
             .border(1.dp, Color.White.copy(alpha = 0.95f), RoundedCornerShape(999.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(
+                horizontal = if (useVerticalLabel) 8.dp else 16.dp,
+                vertical = if (useVerticalLabel) 4.dp else 6.dp,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = coloredText,
             style = MaterialTheme.typography.titleSmall.copy(
                 fontFamily = PlayfulLabelFamily,
+                fontSize = if (useVerticalLabel) 11.sp else 14.sp,
             ),
+            maxLines = if (useVerticalLabel) label.length else 1,
+            softWrap = useVerticalLabel,
+            overflow = TextOverflow.Clip,
+            textAlign = TextAlign.Center,
         )
     }
 }
 
 @Composable
 private fun SkippedStampOverlay(
-    span: Int,
+    compactMode: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val scale = when {
-        span >= 5 -> 1f
-        span == 4 -> 0.98f
-        span == 3 -> 0.96f
-        span == 2 -> 0.92f
-        else -> 0.9f
-    }
-    val overlayAlpha = when {
-        span >= 4 -> 0.9f
-        span == 3 -> 0.88f
-        span == 2 -> 0.84f
-        else -> 0.8f
-    }
-    val stampHeight = when {
-        span >= 5 -> 66.dp
-        span == 4 -> 62.dp
-        span == 3 -> 58.dp
-        span == 2 -> 52.dp
-        else -> 48.dp
-    }
+    val stampShape = RoundedCornerShape(if (compactMode) 8.dp else 10.dp)
+    val stampHeight = if (compactMode) 16.dp else 20.dp
     Box(
         modifier = modifier
+            .wrapContentWidth()
+            .height(stampHeight)
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                alpha = overlayAlpha
-            }
-            .height(stampHeight),
+                rotationZ = if (compactMode) -13f else -9f
+            },
+        contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .align(Alignment.CenterStart)
-                .size(42.dp)
-                .clip(CircleShape)
-                .border(3.dp, Color(0xFF4F4F4F), CircleShape),
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .size(32.dp)
-                .clip(CircleShape)
-                .border(2.dp, Color(0xFF666666), CircleShape),
-        )
-        repeat(3) { index ->
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .offset(x = 4.dp, y = ((index - 1) * 10).dp)
-                    .width(24.dp)
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(Color(0xFF595959))
-                    .graphicsLayer {
-                        rotationZ = if (index == 1) 0f else -3f
-                    },
-            )
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .offset(x = (-2).dp)
-                .graphicsLayer { rotationZ = -11f }
-                .clip(RoundedCornerShape(9.dp))
-                .background(Color(0xFF616161))
-                .border(2.dp, Color(0xFF4A4A4A), RoundedCornerShape(9.dp))
-                .padding(horizontal = 10.dp, vertical = 5.dp),
+                .wrapContentWidth()
+                .clip(stampShape)
+                .background(Color(0xFF69717D).copy(alpha = if (compactMode) 0.16f else 0.2f))
+                .border(1.dp, Color(0xFF4F5763).copy(alpha = 0.34f), stampShape)
+                .padding(
+                    horizontal = if (compactMode) 5.dp else 7.dp,
+                    vertical = if (compactMode) 1.dp else 2.dp,
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = "\u7fd8\u6389\u4e86",
-                style = MaterialTheme.typography.labelLarge.copy(
+                style = MaterialTheme.typography.labelMedium.copy(
                     fontFamily = PlayfulLabelFamily,
+                    fontSize = if (compactMode) 9.sp else 10.sp,
                 ),
                 fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFFF7F7F7),
+                color = Color(0xFF4A515D).copy(alpha = 0.92f),
+                maxLines = 1,
+                softWrap = false,
             )
         }
     }
@@ -1277,6 +1412,12 @@ private fun HeaderCell(
 
 @Composable
 private fun EmptyWeekCard(selectedWeek: Int) {
+    var messageIndex by rememberSaveable { mutableStateOf(-1) }
+    LaunchedEffect(selectedWeek) {
+        messageIndex = (messageIndex + 1) % EMPTY_WEEK_EASTER_LINES.size
+    }
+    val message = EMPTY_WEEK_EASTER_LINES[if (messageIndex < 0) 0 else messageIndex]
+
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = CardWhite),
@@ -1294,7 +1435,7 @@ private fun EmptyWeekCard(selectedWeek: Int) {
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "\u8bf7\u5207\u6362\u5176\u4ed6\u5468\u6b21\u67e5\u770b\uff0c\u6216\u68c0\u67e5\u5bfc\u5165\u7ed3\u679c\u3002",
+                text = message,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1439,13 +1580,16 @@ private fun EditPersistedCourseDialog(
                     textStyle = fieldTextStyle,
                     singleLine = true,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     OutlinedTextField(
                         value = day,
                         onValueChange = { day = it },
                         label = { Text(text = "\u661f\u671f(1-7)", style = fieldLabelStyle) },
                         textStyle = fieldTextStyle,
-                        modifier = Modifier.width(110.dp),
+                        modifier = Modifier.weight(1f),
                         singleLine = true,
                     )
                     OutlinedTextField(
@@ -1453,7 +1597,7 @@ private fun EditPersistedCourseDialog(
                         onValueChange = { start = it },
                         label = { Text(text = "\u5f00\u59cb\u8282", style = fieldLabelStyle) },
                         textStyle = fieldTextStyle,
-                        modifier = Modifier.width(110.dp),
+                        modifier = Modifier.weight(1f),
                         singleLine = true,
                     )
                     OutlinedTextField(
@@ -1461,7 +1605,7 @@ private fun EditPersistedCourseDialog(
                         onValueChange = { end = it },
                         label = { Text(text = "\u7ed3\u675f\u8282", style = fieldLabelStyle) },
                         textStyle = fieldTextStyle,
-                        modifier = Modifier.width(110.dp),
+                        modifier = Modifier.weight(1f),
                         singleLine = true,
                     )
                 }
@@ -1740,6 +1884,12 @@ private fun axisTimeLabel(raw: String): String {
 private const val DEFAULT_PERIOD_COUNT = 12
 private val DAY_LABELS = listOf("\u4e00", "\u4e8c", "\u4e09", "\u56db", "\u4e94", "\u516d", "\u65e5")
 private val DAY_NUMBERS = (1..7).toList()
+private const val ALL_SKIPPED_EASTER_EGG = "666,\u76d0\u90fd\u4e0d\u76d0\u4e86"
+private val EMPTY_WEEK_EASTER_LINES = listOf(
+    "\u4f60\u53ef\u4ee5\u8054\u7cfb\u8001\u5e08\uff0c\u8ba9\u4ed6\u7ed9\u4f60\u52a0\u8bfe",
+    "\u4f60\u53ef\u4ee5\u6253\u7535\u8bdd\u7ed9\u6559\u52a1\u5904\uff0c\u8ba9\u4ed6\u628a\u5b66\u8d39\u9000\u4f60",
+    "tm\u7684\uff0c\u8fd9b\u8bfe\u4e0d\u4e0a\u4e5f\u7f62",
+)
 
 private data class EasterEggAchievement(
     val id: Long,

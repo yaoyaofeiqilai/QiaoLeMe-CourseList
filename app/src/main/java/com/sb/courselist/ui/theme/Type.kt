@@ -14,6 +14,12 @@ val ArtHeadlineFamily = FontFamily(
 val CardTitleFamily = FontFamily(
     Font(R.font.zcool_xiaowei_regular, weight = FontWeight.Normal),
 )
+val CardCuteTitleFamily = FontFamily(
+    Font(R.font.zcool_kuaile_regular, weight = FontWeight.Normal),
+)
+val CardCuteMetaFamily = FontFamily(
+    Font(R.font.zcool_xiaowei_regular, weight = FontWeight.Normal),
+)
 val PlayfulLabelFamily = FontFamily(
     Font(R.font.zcool_kuaile_regular, weight = FontWeight.Normal),
 )
