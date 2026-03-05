@@ -83,6 +83,23 @@ class TemplateRuleEngineTest {
         assertTrue(recovered.teacher.startsWith("\u738b"))
     }
 
+    @Test
+    fun parse_extractsPeriodTimesFromLeftAxis() {
+        val tokens = baseHeaderTokens() + listOf(
+            TextToken("08:00", 12f, 80f, 20f, 8f, 1),
+            TextToken("08:45", 12f, 92f, 20f, 8f, 1),
+            TextToken("09:00", 12f, 140f, 20f, 8f, 1),
+            TextToken("09:45", 12f, 152f, 20f, 8f, 1),
+            TextToken("\u79bb\u6563\u6570\u5b66", 200f, 90f, 40f, 10f, 1),
+            TextToken("(1-2\u8282)1-16\u5468/\u573a\u5730:\u6587\u6e0a305/\u6559\u5e08:\u5510\u857e", 200f, 104f, 80f, 8f, 1),
+        )
+
+        val result = engine.parse(tokens, sourceTag = "unit-test")
+        assertNotNull(result)
+        assertEquals("08:00-08:45", result!!.meta.periodTimes[1])
+        assertEquals("09:00-09:45", result.meta.periodTimes[2])
+    }
+
     private fun baseHeaderTokens(): List<TextToken> {
         return listOf(
             TextToken("\u65e5", 120f, 20f, 8f, 8f, 1),

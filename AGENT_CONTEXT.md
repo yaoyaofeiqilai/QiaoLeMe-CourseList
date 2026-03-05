@@ -1,97 +1,74 @@
 # SB-courselist Agent Context
 
-Last updated: 2026-03-04
+Last updated: 2026-03-04 23:51
 Workspace: `E:\MyCode\SB-courselist`
 
 ## Goal
-- Android app that imports a timetable PDF and generates a semester schedule.
-- UI style: cartoon + fresh.
-- Required fields per course card: name, room, teacher.
+- Build an Android timetable app that imports PDF and extracts:
+  - course name
+  - room/location
+  - teacher
+  - day/period/weeks
+- Priority: extraction accuracy first.
 
-## Locked Decisions
-- Stack: native Android (Kotlin + Compose).
-- Parsing: text-first, OCR fallback.
-- Scope v1: high-accuracy for current template family first.
-- Navigation: two tabs (`Timetable`, `Import`).
-- Editing: manual correction required.
+## Current State
+- App builds and installs.
+- Parser stack:
+  - `PdfTextParser` (PDF text coordinates)
+  - `TemplateRuleEngine` (rule extraction)
+  - `PdfOcrParser` fallback
+- Connected device installs succeeded with:
+  - `versionCode = 2`
+  - `versionName = 1.0.1`
 
-## Implemented
-- Full Android project scaffold with Compose + Room + parser pipeline.
-- Parsers:
-  - `PdfTextParser` (PDFBox tokens with coordinates)
-  - `TemplateRuleEngine` (grid mapping and field extraction)
-  - `PdfOcrParser` (ML Kit Chinese OCR fallback)
-  - `CompositeScheduleParser` (text then OCR)
-- Data layer:
-  - Room entities/DAO/repository complete
-- UI:
-  - Import screen with parse state + editable preview + save
-  - Timetable weekly grid
-  - Direct edit for persisted courses from timetable cells
-- Parse robustness upgrade for Xiaomi sample PDF:
-  - Extended weekday recognition (`周一/星期一/礼拜一/Mon...`)
-  - Synthetic weekday column anchors when headers are not detected
-  - Failure now auto-enters editable manual fallback preview (no dead-end error)
-- Added parser diagnostics logs (`ScheduleParser` tag) for on-device troubleshooting
-- Build/network hardening:
-  - Added Aliyun Maven mirrors in `settings.gradle.kts`
-  - Added IPv4 preference in `gradle.properties`
-  - Added SDK path setup script `scripts/setup_android_sdk.ps1`
+## Latest Completed Work
+1. Parser upgraded to `cn-campus-v2` in
+   - `app/src/main/java/com/sb/courselist/parser/TemplateRuleEngine.kt`
+2. Better text token chunking in
+   - `app/src/main/java/com/sb/courselist/parser/PdfTextParser.kt`
+3. Name cleanup improvements:
+   - balances broken brackets like `...（慕课` -> `...（慕课）`
+4. Added parser unit tests in
+   - `app/src/test/java/com/sb/courselist/parser/TemplateRuleEngineTest.kt`
+5. Offline parser tool maintained in
+   - `scripts/parse_timetable_pdf.py`
+   - exports JSON/CSV in `parse_outputs_final/`
 
-## Build/Test Status (Current)
-- `:app:assembleDebug` passed.
-- `:app:testDebugUnitTest` passed.
-- APK generated:
-  - `E:\MyCode\SB-courselist\app\build\outputs\apk\debug\app-debug.apk`
-
-## Android SDK (Current machine)
-- SDK root: `E:\Android\Sdk`
-- Installed offline:
-  - `platform-tools`
-  - `platforms\android-35`
-  - `build-tools\34.0.0`
-  - `build-tools\35.0.0`
+## User-Reported Problem Under Investigation
+- User reported: weekend courses look duplicated with Thu/Fri.
+- User confirmed exported `json/csv` also looks wrong.
+- Current diagnosis status:
+  - at least part of weekend entries are present in source weekend columns,
+  - but behavior still needs stricter validation and potential dedup policy.
 
 ## Important Files
-- Entry:
-  - `app/src/main/java/com/sb/courselist/MainActivity.kt`
-  - `app/src/main/java/com/sb/courselist/CourseListApplication.kt`
-- Parser:
+- Parser core:
   - `app/src/main/java/com/sb/courselist/parser/TemplateRuleEngine.kt`
-  - `app/src/main/java/com/sb/courselist/parser/CompositeScheduleParser.kt`
   - `app/src/main/java/com/sb/courselist/parser/PdfTextParser.kt`
-  - `app/src/main/java/com/sb/courselist/parser/PdfOcrParser.kt`
-- UI:
-  - `app/src/main/java/com/sb/courselist/ui/CourseListApp.kt`
-  - `app/src/main/java/com/sb/courselist/ui/screen/ImportScreen.kt`
-  - `app/src/main/java/com/sb/courselist/ui/screen/TimetableScreen.kt`
+- Parser tests:
+  - `app/src/test/java/com/sb/courselist/parser/TemplateRuleEngineTest.kt`
+- Offline verification:
+  - `scripts/parse_timetable_pdf.py`
+  - `parse_outputs_final/*.parsed.json`
+  - `parse_outputs_final/*.parsed.csv`
+- Build config:
+  - `app/build.gradle.kts`
 
-## Resume Commands
-1. Build debug APK:
-```powershell
+## Build and Install (CMD-safe)
+```bat
 cd E:\MyCode\SB-courselist
-.\gradle-8.7-bin\gradle-8.7\bin\gradle.bat :app:assembleDebug --no-daemon --console=plain
+.\gradlew.bat :app:testDebugUnitTest
+.\gradlew.bat :app:assembleDebug
+"E:\Android\Sdk\platform-tools\adb.exe" install -r "E:\MyCode\SB-courselist\app\build\outputs\apk\debug\app-debug.apk"
+"E:\Android\Sdk\platform-tools\adb.exe" shell dumpsys package com.sb.courselist | findstr "versionCode versionName lastUpdateTime"
 ```
 
-2. Run unit tests:
-```powershell
-.\gradle-8.7-bin\gradle-8.7\bin\gradle.bat :app:testDebugUnitTest --no-daemon --console=plain
-```
-
-3. Install to device (USB debugging enabled):
-```powershell
-E:\Android\Sdk\platform-tools\adb.exe devices
-E:\Android\Sdk\platform-tools\adb.exe install -r E:\MyCode\SB-courselist\app\build\outputs\apk\debug\app-debug.apk
-```
-
-## Next Work
-1. Device validation:
-  - import real PDF
-  - verify parse accuracy
-  - verify edit and persistence flow
-2. Parser tuning against your real template data.
-3. Optional localization pass (current UI text is mainly English to avoid encoding corruption).
+## Next Priority
+1. Reproduce and isolate day-column mis-assignment for weekend duplication claim.
+2. Add deterministic policy switch if needed:
+   - `strict_raw_mode`: keep all parsed entries
+   - `merged_week_mode`: merge same `name+teacher+room+period` across days when week ranges imply split schedule.
 
 ## Restore Context
-- Prompt next agent with:
-  - `Read E:\MyCode\SB-courselist\AGENT_CONTEXT.md first, then continue implementation.`
+- Next agent prompt:
+  - `Read E:\MyCode\SB-courselist\AGENT_CONTEXT.md, then continue weekend-duplicate parser diagnosis.`

@@ -42,24 +42,85 @@ private class PositionAwareStripper : PDFTextStripper() {
     }
 
     override fun writeString(text: String, textPositions: MutableList<TextPosition>) {
-        if (text.isBlank() || textPositions.isEmpty()) return
-        val compact = text.replace(Regex("\\s+"), "")
-        if (compact.isBlank()) return
+        if (textPositions.isEmpty()) return
 
-        val first = textPositions.first()
-        val last = textPositions.last()
-        val width = (last.xDirAdj + last.widthDirAdj - first.xDirAdj)
-            .coerceAtLeast(first.widthDirAdj)
-        val height = textPositions.maxOf { it.heightDir.coerceAtLeast(1f) }
+        val parts = mutableListOf<TextToken>()
+        val builder = StringBuilder()
+        var startX = 0f
+        var startY = 0f
+        var endX = 0f
+        var maxHeight = 0f
+        var hasActive = false
+        var previous: TextPosition? = null
 
-        tokens += TextToken(
-            text = compact,
-            x = first.xDirAdj,
-            y = first.yDirAdj,
-            width = width,
-            height = height,
-            page = activePage,
-        )
+        fun flush() {
+            if (!hasActive) return
+            val value = builder.toString()
+                .replace(Regex("\\s+"), "")
+                .trim()
+            if (value.isNotBlank()) {
+                parts += TextToken(
+                    text = value,
+                    x = startX,
+                    y = startY,
+                    width = (endX - startX).coerceAtLeast(1f),
+                    height = maxHeight.coerceAtLeast(1f),
+                    page = activePage,
+                )
+            }
+            builder.clear()
+            hasActive = false
+            previous = null
+        }
+
+        textPositions.forEach { position ->
+            val unicode = position.unicode.orEmpty()
+            if (unicode.isBlank()) {
+                flush()
+                return@forEach
+            }
+
+            val prev = previous
+            if (!hasActive) {
+                hasActive = true
+                startX = position.xDirAdj
+                startY = position.yDirAdj
+                endX = position.xDirAdj + position.widthDirAdj
+                maxHeight = position.heightDir
+                builder.append(unicode)
+                previous = position
+                return@forEach
+            }
+
+            val gap = position.xDirAdj - (prev!!.xDirAdj + prev.widthDirAdj)
+            val lineBreak = kotlin.math.abs(position.yDirAdj - prev.yDirAdj) > LINE_BREAK_TOLERANCE
+            val chunkBreak = gap > maxOf(CHUNK_GAP_MIN, prev.widthDirAdj * CHUNK_GAP_FACTOR)
+
+            if (lineBreak || chunkBreak) {
+                flush()
+                hasActive = true
+                startX = position.xDirAdj
+                startY = position.yDirAdj
+                endX = position.xDirAdj + position.widthDirAdj
+                maxHeight = position.heightDir
+                builder.append(unicode)
+                previous = position
+                return@forEach
+            }
+
+            builder.append(unicode)
+            endX = position.xDirAdj + position.widthDirAdj
+            maxHeight = maxOf(maxHeight, position.heightDir)
+            previous = position
+        }
+
+        flush()
+        tokens += parts
+    }
+
+    companion object {
+        private const val CHUNK_GAP_FACTOR = 1.8f
+        private const val CHUNK_GAP_MIN = 6f
+        private const val LINE_BREAK_TOLERANCE = 2.2f
     }
 }
-

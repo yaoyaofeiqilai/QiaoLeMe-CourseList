@@ -35,6 +35,8 @@ class RoomScheduleRepository(
                 importedAt = schedule.meta.importedAt,
                 templateVersion = schedule.meta.templateVersion,
                 sourceTag = schedule.meta.sourceTag,
+                termStartEpochDay = schedule.meta.termStartEpochDay,
+                periodTimeMapText = encodePeriodTimes(schedule.meta.periodTimes),
             ),
         )
         dao.deleteCoursesForSchedule(scheduleId)
@@ -43,6 +45,11 @@ class RoomScheduleRepository(
                 entry.toEntity(scheduleId = scheduleId)
             },
         )
+    }
+
+    override suspend fun addCourse(entry: CourseEntry) {
+        if (entry.scheduleId <= 0L) return
+        dao.insertCourse(entry.toEntity(scheduleId = entry.scheduleId))
     }
 
     override suspend fun updateCourse(entry: CourseEntry) {
@@ -60,6 +67,8 @@ private fun ScheduleWithCourses.toDomain(): ParsedSchedule {
             importedAt = schedule.importedAt,
             templateVersion = schedule.templateVersion,
             sourceTag = schedule.sourceTag,
+            termStartEpochDay = schedule.termStartEpochDay,
+            periodTimes = decodePeriodTimes(schedule.periodTimeMapText),
         ),
         courses = courses.map { entity ->
             CourseEntry(
@@ -68,6 +77,7 @@ private fun ScheduleWithCourses.toDomain(): ParsedSchedule {
                 name = entity.name,
                 teacher = entity.teacher,
                 location = entity.location,
+                note = entity.note,
                 dayOfWeek = entity.dayOfWeek,
                 startPeriod = entity.startPeriod,
                 endPeriod = entity.endPeriod,
@@ -86,6 +96,7 @@ private fun CourseEntry.toEntity(scheduleId: Long): CourseEntity {
         name = name,
         teacher = teacher,
         location = location,
+        note = note,
         dayOfWeek = dayOfWeek,
         startPeriod = startPeriod,
         endPeriod = endPeriod,
@@ -95,3 +106,26 @@ private fun CourseEntry.toEntity(scheduleId: Long): CourseEntity {
     )
 }
 
+private fun encodePeriodTimes(map: Map<Int, String>): String {
+    if (map.isEmpty()) return ""
+    return map.entries
+        .sortedBy { it.key }
+        .joinToString(separator = ";") { (period, time) ->
+            "${period}:${time.trim()}"
+        }
+}
+
+private fun decodePeriodTimes(text: String): Map<Int, String> {
+    if (text.isBlank()) return emptyMap()
+    return text.split(';')
+        .mapNotNull { item ->
+            val idx = item.indexOf(':')
+            if (idx <= 0 || idx >= item.lastIndex) return@mapNotNull null
+            val period = item.substring(0, idx).toIntOrNull() ?: return@mapNotNull null
+            val value = item.substring(idx + 1).trim()
+            if (value.isBlank()) return@mapNotNull null
+            period to value
+        }
+        .sortedBy { it.first }
+        .toMap()
+}

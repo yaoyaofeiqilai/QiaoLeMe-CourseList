@@ -23,10 +23,12 @@ interface ScheduleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCourses(courses: List<CourseEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCourse(course: CourseEntity): Long
+
     @Query("DELETE FROM courses WHERE scheduleId = :scheduleId")
     suspend fun deleteCoursesForSchedule(scheduleId: Long)
 
     @Update
     suspend fun updateCourse(course: CourseEntity)
 }
-

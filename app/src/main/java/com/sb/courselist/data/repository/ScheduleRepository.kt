@@ -10,6 +10,6 @@ interface ScheduleRepository {
     fun observeCurrentSchedule(): Flow<ParsedSchedule?>
     suspend fun importAndParse(uri: Uri): ParseResult
     suspend fun saveSchedule(schedule: ParsedSchedule)
+    suspend fun addCourse(entry: CourseEntry)
     suspend fun updateCourse(entry: CourseEntry)
 }
-

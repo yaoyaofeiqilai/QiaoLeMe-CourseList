@@ -8,5 +8,25 @@ if (-not (Test-Path ".\local.properties")) {
     exit 1
 }
 
-Write-Host "Running debug build with local Gradle..." -ForegroundColor Cyan
-.\gradle-8.7-bin\gradle-8.7\bin\gradle.bat :app:assembleDebug --no-daemon --console=plain
+Write-Host "Running parser unit tests..." -ForegroundColor Cyan
+.\gradlew.bat :app:testDebugUnitTest --console=plain
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-Host "Building debug APK..." -ForegroundColor Cyan
+.\gradlew.bat :app:assembleDebug --console=plain
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+$adb = "E:\Android\Sdk\platform-tools\adb.exe"
+if (-not (Test-Path $adb)) {
+    Write-Host "adb not found at $adb" -ForegroundColor Yellow
+    exit 1
+}
+
+Write-Host "Checking connected devices..." -ForegroundColor Cyan
+& $adb devices
+
+Write-Host "Installing latest debug APK..." -ForegroundColor Cyan
+& $adb install -r "E:\MyCode\SB-courselist\app\build\outputs\apk\debug\app-debug.apk"
+
+Write-Host "Installed app version:" -ForegroundColor Cyan
+& $adb shell dumpsys package com.sb.courselist | Select-String "versionCode|versionName|lastUpdateTime"

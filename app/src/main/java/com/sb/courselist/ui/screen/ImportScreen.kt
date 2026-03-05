@@ -1,5 +1,6 @@
 package com.sb.courselist.ui.screen
 
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -41,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,18 +63,38 @@ import com.sb.courselist.ui.theme.AccentGreen
 import com.sb.courselist.ui.theme.BorderMint
 import com.sb.courselist.ui.theme.CardWhite
 import com.sb.courselist.ui.theme.MintBg
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 fun ImportScreen(
     uiState: CourseListUiState,
-    onImportSelected: (Uri, String?) -> Unit,
+    onImportSelected: (Uri, String?, Long) -> Unit,
     onSavePreview: () -> Unit,
     onUpdatePreviewCourse: (CourseEntry) -> Unit,
     onClearPreview: () -> Unit,
 ) {
     val context = LocalContext.current
+    var termStartEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault()) }
+
+    fun showTermStartDateDialog() {
+        val initial = termStartEpochDay?.let { LocalDate.ofEpochDay(it) } ?: LocalDate.now()
+        DatePickerDialog(
+            context,
+            { _, year, month, day ->
+                termStartEpochDay = LocalDate.of(year, month + 1, day).toEpochDay()
+            },
+            initial.year,
+            initial.monthValue - 1,
+            initial.dayOfMonth,
+        ).show()
+    }
+
     val launcher = rememberLauncherForActivityResult(OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        val startEpoch = termStartEpochDay ?: return@rememberLauncherForActivityResult
         runCatching {
             context.contentResolver.takePersistableUriPermission(
                 uri,
@@ -80,7 +102,7 @@ fun ImportScreen(
             )
         }
         val fileName = DocumentFile.fromSingleUri(context, uri)?.name ?: uri.lastPathSegment
-        onImportSelected(uri, fileName)
+        onImportSelected(uri, fileName, startEpoch)
     }
 
     var editingCourse by remember { mutableStateOf<CourseEntry?>(null) }
@@ -104,6 +126,9 @@ fun ImportScreen(
             HeroImportCard(
                 fileName = uiState.selectedFileName,
                 isParsing = uiState.isParsing,
+                termStartDateText = termStartEpochDay?.let { LocalDate.ofEpochDay(it).format(dateFormatter) },
+                canSelectPdf = termStartEpochDay != null,
+                onPickTermStartDate = ::showTermStartDateDialog,
                 onSelectPdf = { launcher.launch(arrayOf("application/pdf")) },
             )
 
@@ -122,7 +147,7 @@ fun ImportScreen(
                                 strokeWidth = 2.dp,
                             )
                             Text(
-                                text = " Parsing timetable...",
+                                text = " 正在解析课表...",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
@@ -141,7 +166,7 @@ fun ImportScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
-                            text = "Recognition Tips",
+                            text = "识别提示",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -160,11 +185,11 @@ fun ImportScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "No preview yet",
+                            text = "暂无预览",
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Text(
-                            text = "Import a PDF file to auto-generate courses and review details.",
+                            text = "导入 PDF 后可自动识别课程，并在保存前手动校对。",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -180,7 +205,7 @@ fun ImportScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text(
-                            text = "Preview (editable)",
+                            text = "预览（可编辑）",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -203,14 +228,14 @@ fun ImportScreen(
                                 enabled = !uiState.isSaving,
                             ) {
                                 Icon(Icons.Rounded.Save, contentDescription = null)
-                                Text(" Save")
+                                Text(" 保存")
                             }
                             Button(
                                 onClick = onClearPreview,
                                 modifier = Modifier.weight(1f),
                                 enabled = !uiState.isSaving,
                             ) {
-                                Text("Clear")
+                                Text("清空")
                             }
                         }
                     }
@@ -235,6 +260,9 @@ fun ImportScreen(
 private fun HeroImportCard(
     fileName: String?,
     isParsing: Boolean,
+    termStartDateText: String?,
+    canSelectPdf: Boolean,
+    onPickTermStartDate: () -> Unit,
     onSelectPdf: () -> Unit,
 ) {
     Card(
@@ -276,26 +304,42 @@ private fun HeroImportCard(
                 }
                 Column {
                     Text(
-                        text = "Import Timetable PDF",
+                        text = "导入课表 PDF",
                         style = MaterialTheme.typography.titleLarge,
                     )
                     Text(
-                        text = "Text parsing first, OCR fallback.",
+                        text = "优先文本解析，必要时 OCR 兜底。",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
             ElevatedButton(
-                onClick = onSelectPdf,
+                onClick = onPickTermStartDate,
                 enabled = !isParsing,
                 shape = RoundedCornerShape(12.dp),
             ) {
+                Text(
+                    text = if (termStartDateText == null) "设置开学日期" else "开学日期：$termStartDateText",
+                )
+            }
+            ElevatedButton(
+                onClick = onSelectPdf,
+                enabled = !isParsing && canSelectPdf,
+                shape = RoundedCornerShape(12.dp),
+            ) {
                 Icon(Icons.Rounded.FileOpen, contentDescription = null)
-                Text(" Select PDF")
+                Text(" 选择 PDF")
+            }
+            if (!canSelectPdf) {
+                Text(
+                    text = "请先设置开学日期，再导入课表。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             if (!fileName.isNullOrBlank()) {
                 Text(
-                    text = "Current file: $fileName",
+                    text = "当前文件：$fileName",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -351,21 +395,28 @@ private fun PreviewCourseCard(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "Day ${course.dayOfWeek}  ${course.startPeriod}-${course.endPeriod}",
+                text = "星期${course.dayOfWeek}  第${course.startPeriod}-${course.endPeriod}节",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "Room: ${course.location.ifBlank { "unknown" }}",
+                text = "地点：${course.location.ifBlank { "待补充" }}",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                text = "Teacher: ${course.teacher.ifBlank { "unknown" }}",
+                text = "教师：${course.teacher.ifBlank { "待补充" }}",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (course.note.isNotBlank()) {
+                Text(
+                    text = "备注：${course.note}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         IconButton(onClick = onEdit) {
-            Icon(Icons.Rounded.Edit, contentDescription = "Edit")
+            Icon(Icons.Rounded.Edit, contentDescription = "编辑")
         }
     }
 }
@@ -379,52 +430,60 @@ private fun EditCourseDialog(
     var name by remember(course.id) { mutableStateOf(course.name) }
     var location by remember(course.id) { mutableStateOf(course.location) }
     var teacher by remember(course.id) { mutableStateOf(course.teacher) }
+    var note by remember(course.id) { mutableStateOf(course.note) }
     var day by remember(course.id) { mutableStateOf(course.dayOfWeek.toString()) }
     var start by remember(course.id) { mutableStateOf(course.startPeriod.toString()) }
     var end by remember(course.id) { mutableStateOf(course.endPeriod.toString()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Course") },
+        title = { Text("编辑课程") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Course") },
+                    label = { Text("课程名称") },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = location,
                     onValueChange = { location = it },
-                    label = { Text("Room") },
+                    label = { Text("上课地点") },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = teacher,
                     onValueChange = { teacher = it },
-                    label = { Text("Teacher") },
+                    label = { Text("任课教师") },
                     singleLine = true,
+                )
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("备注") },
+                    minLines = 2,
+                    maxLines = 4,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = day,
                         onValueChange = { day = it },
-                        label = { Text("Day(1-7)") },
+                        label = { Text("星期(1-7)") },
                         modifier = Modifier.width(120.dp),
                         singleLine = true,
                     )
                     OutlinedTextField(
                         value = start,
                         onValueChange = { start = it },
-                        label = { Text("Start") },
+                        label = { Text("开始节") },
                         modifier = Modifier.width(120.dp),
                         singleLine = true,
                     )
                     OutlinedTextField(
                         value = end,
                         onValueChange = { end = it },
-                        label = { Text("End") },
+                        label = { Text("结束节") },
                         modifier = Modifier.width(120.dp),
                         singleLine = true,
                     )
@@ -442,6 +501,7 @@ private fun EditCourseDialog(
                             name = name.ifBlank { course.name },
                             location = location,
                             teacher = teacher,
+                            note = note.trim(),
                             dayOfWeek = dayValue,
                             startPeriod = startValue,
                             endPeriod = endValue,
@@ -449,12 +509,11 @@ private fun EditCourseDialog(
                     )
                 },
             ) {
-                Text("Save")
+                Text("保存")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text("取消") }
         },
     )
 }
-

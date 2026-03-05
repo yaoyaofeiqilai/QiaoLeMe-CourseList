@@ -24,6 +24,7 @@ data class CourseEntity(
     val name: String,
     val teacher: String,
     val location: String,
+    val note: String = "",
     val dayOfWeek: Int,
     val startPeriod: Int,
     val endPeriod: Int,
@@ -31,4 +32,3 @@ data class CourseEntity(
     val rawText: String,
     val sourceConfidence: Float,
 )
-

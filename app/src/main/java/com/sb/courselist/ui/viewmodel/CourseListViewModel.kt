@@ -38,7 +38,7 @@ class CourseListViewModel(
         _uiState.update { it.copy(activeTab = tab) }
     }
 
-    fun importPdf(uri: Uri, fileName: String?) {
+    fun importPdf(uri: Uri, fileName: String?, termStartEpochDay: Long) {
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
@@ -50,19 +50,20 @@ class CourseListViewModel(
             }
             when (val result = repository.importAndParse(uri)) {
                 is ParseResult.Success -> {
+                    val scheduleWithTermStart = result.schedule.withTermStartEpochDay(termStartEpochDay)
                     _uiState.update { state ->
                         state.copy(
                             isParsing = false,
-                            previewSchedule = result.schedule,
+                            previewSchedule = scheduleWithTermStart,
                             importIssues = result.issues,
-                            message = "Parsing finished. Review and save.",
+                            message = "解析完成，请核对后保存。",
                             activeTab = BottomTab.IMPORT,
                         )
                     }
                 }
 
                 is ParseResult.FallbackRequired -> {
-                    val manualSchedule = buildManualSeedSchedule(result.reason)
+                    val manualSchedule = buildManualSeedSchedule(result.reason, termStartEpochDay)
                     _uiState.update { state ->
                         state.copy(
                             isParsing = false,
@@ -71,14 +72,14 @@ class CourseListViewModel(
                                 level = IssueLevel.WARNING,
                                 message = result.reason,
                             ),
-                            message = "Auto parsing is incomplete. Please edit and save manually.",
+                            message = "自动解析不完整，请手动补充后保存。",
                             activeTab = BottomTab.IMPORT,
                         )
                     }
                 }
 
                 is ParseResult.Failure -> {
-                    val manualSchedule = buildManualSeedSchedule(result.reason)
+                    val manualSchedule = buildManualSeedSchedule(result.reason, termStartEpochDay)
                     _uiState.update { state ->
                         state.copy(
                             isParsing = false,
@@ -89,7 +90,7 @@ class CourseListViewModel(
                                     message = result.reason,
                                 ),
                             ),
-                            message = "Auto parsing failed. Manual mode is ready.",
+                            message = "自动解析失败，已进入手动编辑模式。",
                             activeTab = BottomTab.IMPORT,
                         )
                     }
@@ -109,7 +110,7 @@ class CourseListViewModel(
                     previewSchedule = null,
                     importIssues = emptyList(),
                     activeTab = BottomTab.TIMETABLE,
-                    message = "Timetable saved.",
+                    message = "课表已保存。",
                 )
             }
         }
@@ -145,19 +146,26 @@ class CourseListViewModel(
         }
     }
 
-    private fun buildManualSeedSchedule(reason: String): ParsedSchedule {
+    fun addPersistedCourse(course: CourseEntry) {
+        viewModelScope.launch {
+            repository.addCourse(course)
+        }
+    }
+
+    private fun buildManualSeedSchedule(reason: String, termStartEpochDay: Long): ParsedSchedule {
         return ParsedSchedule(
             meta = ScheduleMeta(
-                termName = "Manual Timetable",
+                termName = "手动课表",
                 totalWeeks = 20,
                 importedAt = System.currentTimeMillis(),
                 templateVersion = "manual-seed-v1",
                 sourceTag = "manual-fallback",
+                termStartEpochDay = termStartEpochDay,
             ),
             courses = listOf(
                 CourseEntry(
                     id = -1L,
-                    name = "Tap edit to add your first course",
+                    name = "点击编辑，添加第一门课程",
                     teacher = "",
                     location = reason.take(48),
                     dayOfWeek = 1,
@@ -168,6 +176,12 @@ class CourseListViewModel(
                     sourceConfidence = 0.2f,
                 ),
             ),
+        )
+    }
+
+    private fun ParsedSchedule.withTermStartEpochDay(termStartEpochDay: Long): ParsedSchedule {
+        return copy(
+            meta = meta.copy(termStartEpochDay = termStartEpochDay),
         )
     }
 }

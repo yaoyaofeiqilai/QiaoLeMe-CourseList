@@ -84,17 +84,20 @@ class TemplateRuleEngine {
 
         if (courses.isEmpty()) return null
 
+        val periodTimes = extractPeriodTimes(normalizedTokens)
+
         logInfo(
             "parse: source=$sourceTag tokens=${normalizedTokens.size} pages=${byPage.size} courses=${courses.size}",
         )
 
         return ParsedSchedule(
             meta = ScheduleMeta(
-                termName = "Auto Parsed Timetable",
+                termName = "自动识别课表",
                 totalWeeks = 20,
                 importedAt = System.currentTimeMillis(),
                 templateVersion = "cn-campus-v2",
                 sourceTag = sourceTag,
+                periodTimes = periodTimes,
             ),
             courses = courses,
         )
@@ -107,8 +110,13 @@ class TemplateRuleEngine {
     }
 
     private fun extractDayAnchors(tokens: List<TextToken>): List<DayAnchor> {
+        if (tokens.isEmpty()) return emptyList()
+        val minY = tokens.minOf { it.y }
+        val headerYLimit = minY + HEADER_SCAN_HEIGHT
+
         val bestByDay = mutableMapOf<Int, TextToken>()
         tokens.forEach { token ->
+            if (token.y > headerYLimit) return@forEach
             val day = parseDay(token.text) ?: return@forEach
             val existing = bestByDay[day]
             if (existing == null || token.y < existing.y) {
@@ -516,9 +524,7 @@ class TemplateRuleEngine {
         if (normalized.startsWith(CH_WEEK_PREFIX_ALT) && normalized.length >= 3) {
             return mapDayChar(normalized[2])
         }
-        if (normalized.length == 1) {
-            return mapDayChar(normalized[0])
-        }
+        if (normalized.length == 1 && normalized[0] in SINGLE_DAY_CHARS) return mapDayChar(normalized[0])
 
         return when {
             normalized.startsWith(EN_MON) -> 1
@@ -579,6 +585,120 @@ class TemplateRuleEngine {
         return value.coerceIn(0.05f, 0.99f)
     }
 
+    private fun extractPeriodTimes(tokens: List<TextToken>): Map<Int, String> {
+        if (tokens.isEmpty()) return emptyMap()
+
+        val minX = tokens.minOf { it.x }
+        val maxX = tokens.maxOf { it.x + it.width }
+        val width = (maxX - minX).coerceAtLeast(1f)
+        val fallbackAxisRight = minX + width * PERIOD_AXIS_X_RATIO
+        val dayAnchors = extractDayAnchors(tokens)
+        val axisRight = dayAnchors.minOfOrNull { it.x }?.minus(PERIOD_AXIS_RIGHT_MARGIN)
+            ?.coerceAtLeast(minX + PERIOD_AXIS_MIN_WIDTH)
+            ?: fallbackAxisRight
+
+        val anchorsByPeriod = tokens
+            .asSequence()
+            .filter { token -> token.x <= axisRight + PERIOD_AXIS_TOKEN_PAD }
+            .mapNotNull { token ->
+                val value = token.text.toIntOrNull() ?: return@mapNotNull null
+                if (value !in 1..14) return@mapNotNull null
+                PeriodAnchorForTime(period = value, x = token.x, y = token.y)
+            }
+            .groupBy { it.period }
+            .mapValues { (_, anchors) -> anchors.minWithOrNull(compareBy<PeriodAnchorForTime> { it.x }.thenBy { it.y }) }
+            .mapNotNull { (period, anchor) -> anchor?.let { period to it } }
+            .toMap()
+        if (anchorsByPeriod.isEmpty()) return emptyMap()
+        val anchors = anchorsByPeriod.values.sortedBy { it.y }
+
+        val timeTokens = tokens
+            .asSequence()
+            .filter { token -> token.x <= axisRight + PERIOD_AXIS_TIME_X_PAD }
+            .mapNotNull { token ->
+                val times = TIME_REGEX.findAll(token.text).map { match -> match.value }.toList()
+                if (times.isEmpty()) return@mapNotNull null
+                TimeLineToken(y = token.y, values = times)
+            }
+            .toList()
+        if (timeTokens.isEmpty()) return emptyMap()
+
+        val gaps = anchors
+            .zipWithNext { a, b -> b.y - a.y }
+            .filter { it > 6f }
+        val avgGap = if (gaps.isNotEmpty()) {
+            gaps.average().toFloat()
+        } else {
+            PERIOD_TIME_FALLBACK_GAP
+        }
+
+        val result = sortedMapOf<Int, String>()
+        anchors.forEachIndexed { index, anchor ->
+            val topBound = if (index == 0) {
+                anchor.y - avgGap * 0.35f
+            } else {
+                (anchors[index - 1].y + anchor.y) * 0.5f
+            }
+            val bottomBound = if (index == anchors.lastIndex) {
+                anchor.y + avgGap * 0.85f
+            } else {
+                (anchor.y + anchors[index + 1].y) * 0.5f
+            }
+
+            val nearTimes = timeTokens
+                .filter { timeToken ->
+                    timeToken.y >= topBound - PERIOD_TIME_BAND_PAD &&
+                        timeToken.y <= bottomBound + PERIOD_TIME_BAND_PAD
+                }
+                .sortedBy { it.y }
+                .flatMap { it.values }
+                .distinct()
+                .take(2)
+            if (nearTimes.size >= 2) {
+                result[anchor.period] = "${nearTimes[0]}-${nearTimes[1]}"
+            } else if (nearTimes.size == 1) {
+                result[anchor.period] = nearTimes[0]
+            }
+        }
+        return sanitizePeriodTimes(result)
+    }
+
+    private fun sanitizePeriodTimes(input: Map<Int, String>): Map<Int, String> {
+        if (input.isEmpty()) return emptyMap()
+
+        val sorted = input.toSortedMap()
+        val cleaned = sortedMapOf<Int, String>()
+        var previousStart = -1
+
+        sorted.forEach { (period, value) ->
+            val range = parseTimeRange(value) ?: return@forEach
+            val start = range.first
+            val end = range.second
+            if (end <= start) return@forEach
+            if (previousStart >= 0 && start + PERIOD_TIME_ORDER_TOLERANCE_MIN < previousStart) return@forEach
+            cleaned[period] = value
+            previousStart = start
+        }
+        return cleaned
+    }
+
+    private fun parseTimeRange(raw: String): Pair<Int, Int>? {
+        val values = TIME_REGEX.findAll(raw).map { it.value }.toList()
+        if (values.size < 2) return null
+        val start = parseTimeToMinutes(values[0]) ?: return null
+        val end = parseTimeToMinutes(values[1]) ?: return null
+        return start to end
+    }
+
+    private fun parseTimeToMinutes(text: String): Int? {
+        val parts = text.split(':')
+        if (parts.size != 2) return null
+        val hour = parts[0].toIntOrNull() ?: return null
+        val minute = parts[1].toIntOrNull() ?: return null
+        if (hour !in 0..23 || minute !in 0..59) return null
+        return hour * 60 + minute
+    }
+
     private fun logInfo(message: String) {
         runCatching { Log.i(TAG, message) }
     }
@@ -625,6 +745,15 @@ class TemplateRuleEngine {
         private const val WEEK_ALL = "all"
         private const val LINE_Y_TOLERANCE = 3.4f
         private const val HEADER_BOTTOM_PAD = 1.5f
+        private const val HEADER_SCAN_HEIGHT = 140f
+        private const val PERIOD_AXIS_X_RATIO = 0.2f
+        private const val PERIOD_AXIS_RIGHT_MARGIN = 8f
+        private const val PERIOD_AXIS_MIN_WIDTH = 34f
+        private const val PERIOD_AXIS_TOKEN_PAD = 12f
+        private const val PERIOD_AXIS_TIME_X_PAD = 90f
+        private const val PERIOD_TIME_BAND_PAD = 2.5f
+        private const val PERIOD_TIME_FALLBACK_GAP = 58f
+        private const val PERIOD_TIME_ORDER_TOLERANCE_MIN = 20
 
         private const val EN_MON = "mon"
         private const val EN_TUE = "tue"
@@ -700,9 +829,20 @@ class TemplateRuleEngine {
             "\u5b66\u5206",
             "\u5b66\u65f6",
         )
+        private val SINGLE_DAY_CHARS = setOf(
+            '\u4e00',
+            '\u4e8c',
+            '\u4e09',
+            '\u56db',
+            '\u4e94',
+            '\u516d',
+            '\u65e5',
+            '\u5929',
+        )
 
         private val WHITESPACE_REGEX = Regex("\\s+")
         private val TIME_OR_NUMBER_REGEX = Regex("^\\d{1,2}(?::\\d{2})?$")
+        private val TIME_REGEX = Regex("\\d{1,2}:\\d{2}")
         private val LEADING_NOISE_REGEX = Regex("^[^\\u4e00-\\u9fffA-Za-z0-9]+")
         private val TRAILING_SYMBOL_REGEX = Regex("[*&@]+$")
         private val PREFIX_NOISE_REGEX = Regex("^[:\uff1a0-9.,，]+")
@@ -740,4 +880,15 @@ private data class MutableCourse(
     var location: String,
     var teacher: String,
     var rawText: String,
+)
+
+private data class PeriodAnchorForTime(
+    val period: Int,
+    val x: Float,
+    val y: Float,
+)
+
+private data class TimeLineToken(
+    val y: Float,
+    val values: List<String>,
 )

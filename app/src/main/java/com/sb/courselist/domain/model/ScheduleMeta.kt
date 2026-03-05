@@ -7,5 +7,6 @@ data class ScheduleMeta(
     val importedAt: Long,
     val templateVersion: String,
     val sourceTag: String,
+    val termStartEpochDay: Long = 0L,
+    val periodTimes: Map<Int, String> = emptyMap(),
 )
-
