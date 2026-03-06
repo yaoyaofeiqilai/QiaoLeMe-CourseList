@@ -6,4 +6,17 @@ local.properties
 captures/
 .DS_Store
 **/build/
+.android-home/
+gradle-8.7-bin/
+offline-sdk/
 
+# Local parser diagnostics and temporary artifacts
+parse_outputs*/
+tmp_*.json
+tmp_*.csv
+tmp_*.txt
+tmpdb/
+*.db
+*.pdf
+scripts/__pycache__/
+SESSION_LOG_*.md

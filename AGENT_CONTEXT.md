@@ -1,6 +1,6 @@
-# SB-courselist Agent Context
+﻿# SB-courselist Agent Context
 
-Last updated: 2026-03-05
+Last updated: 2026-03-06
 Workspace: `E:\MyCode\SB-courselist`
 
 ## Goal
@@ -9,81 +9,64 @@ Workspace: `E:\MyCode\SB-courselist`
   - weekly timetable view (show only courses in selected week)
   - strong mobile usability and polished visual design
   - manual editing and playful easter-egg interactions
-- Parser accuracy remains important, but current active track is UI/UX stabilization.
+- Keep parser robustness high across different timetable PDF layouts.
 
 ## Current State
-- Build status: successful (`:app:compileDebugKotlin`, `:app:assembleDebug` pass).
-- Install status: flaky due ADB connection instability; most recent attempts often return `no devices/emulators found`.
-- Implemented timetable UX (active):
-  - weekly-only display and week switching
-  - auto current-week calculation from term start date
-  - highlight current weekday when viewing current week
-  - merged contiguous periods into one course card
-  - mobile compact mode with responsive equal-width weekday columns
-  - period-time labels on left axis
-  - manual add/edit/delete course in-app
-  - delete behavior scoped to current week entry
-  - long-press flip card easter-egg actions:
-    - `翘了` marks current week as skipped
-    - `我爱学习` restores from skipped
-  - skipped-state stamp overlay
-  - easter-egg achievement toast/banner text effects
-  - empty-week page alternating custom messages
-- Branding:
-  - app name switched to `逃了么`
-  - custom launcher icon pipeline already integrated (logo asset-based)
+- Build status: successful.
+  - `:app:compileDebugKotlin` pass
+  - `:app:assembleDebug` pass
+  - `:app:testDebugUnitTest --tests com.sb.courselist.parser.TemplateRuleEngineTest` pass (9 tests, 0 failures)
+- Install status: currently no connected ADB device (`adb devices` empty).
+- Version state:
+  - `versionName = "2.0"`
+  - `versionCode = 3`
+  - latest debug APK: `app/build/outputs/apk/debug/app-debug.apk`
+- Parser state:
+  - Fixed a real regression on headerless continuation pages (Yangxiao PDF):
+    - previously dropped top-of-page detail line due to inherited `headerBottom` filtering
+    - now keeps continuation-page top courses when early period-detail line is detected
+- Timetable UI state:
+  - compact mode card title alignment updated so 4-period cards are centered like 2/3-period cards (`span <= 4`).
 
 ## Latest Completed Work
-1. Hero card and top header polish
-   - title updated to `选择性出勤协议`
-   - subtle hero-card background ornaments added
+1. Parser fix for missing second `自然语言处理` entry in `杨逍(2025-2026-2)课表.pdf`
+   - root cause: page 2 lacks weekday anchors, but inherited page-1 header cutoff removed the top course block
+   - file: `app/src/main/java/com/sb/courselist/parser/TemplateRuleEngine.kt`
+2. Added regression unit test for anchorless continuation page top-course retention
+   - file: `app/src/test/java/com/sb/courselist/parser/TemplateRuleEngineTest.kt`
+3. Updated app version to `2.0` for packaging
+   - file: `app/build.gradle.kts`
+4. Updated compact card alignment rule (`span <= 3` -> `span <= 4`)
    - file: `app/src/main/java/com/sb/courselist/ui/screen/TimetableScreen.kt`
+5. Security review summary completed (manifest + code path audit)
+   - no dangerous runtime permissions requested
+   - merged manifest includes `INTERNET` and `ACCESS_NETWORK_STATE` from transitive libs
 
-2. Full-week skipped easter egg
-   - when all visible courses in selected week are skipped, show:
-   - `666,盐都不盐了`
-   - file: `app/src/main/java/com/sb/courselist/ui/screen/TimetableScreen.kt`
+## Known Risks / Notes
+- ADB connectivity remains unstable/intermittent; install verification depends on device availability.
+- `OpenDocument` + `takePersistableUriPermission` keeps read permission for selected files until explicitly released.
+- Local Room DB is not encrypted (stores parsed course fields including `rawText`).
+- Merged manifest includes network permission due to ML Kit/play-services transitive components.
 
-3. Skipped stamp + flip button refinements
-   - compact button vertical text support for `翘了` and `我爱学习`
-   - stamp made smaller, translucent gray, slanted, less intrusive
-   - file: `app/src/main/java/com/sb/courselist/ui/screen/TimetableScreen.kt`
-
-4. Edit dialog layout consistency
-   - equalized `星期/开始节/结束节` fields with `Row + weight(1f)`
-   - applied in timetable edit dialog and import-flow edit dialog
-   - files:
-     - `app/src/main/java/com/sb/courselist/ui/screen/TimetableScreen.kt`
-     - `app/src/main/java/com/sb/courselist/ui/screen/ImportScreen.kt`
-
-5. Card typography refresh (latest)
-   - card title mapped to clearer cartoon style (`zcool_kuaile`)
-   - card meta mapped to `zcool_xiaowei`
-   - 3-period compact cards now follow centered alignment rule (`span <= 3`)
-   - files:
-     - `app/src/main/java/com/sb/courselist/ui/theme/Type.kt`
-     - `app/src/main/java/com/sb/courselist/ui/screen/TimetableScreen.kt`
-
-## Known Blockers / Risks
-- ADB frequently disconnects; installation cannot always be completed immediately.
-- User currently validating font legibility on real device; may require one more font pass after live check.
-- Legacy parser issue (weekend duplication concern) remains tracked but currently deprioritized.
-
-## Important Files (Current UI Track)
-- Timetable screen:
+## Important Files (Active Track)
+- Parser core:
+  - `app/src/main/java/com/sb/courselist/parser/TemplateRuleEngine.kt`
+  - `app/src/test/java/com/sb/courselist/parser/TemplateRuleEngineTest.kt`
+- UI timetable card rendering:
   - `app/src/main/java/com/sb/courselist/ui/screen/TimetableScreen.kt`
-- Import screen and import-edit dialog:
+- Import flow:
   - `app/src/main/java/com/sb/courselist/ui/screen/ImportScreen.kt`
-- Typography:
-  - `app/src/main/java/com/sb/courselist/ui/theme/Type.kt`
-- App icon/name related Android config:
+- Build/version config:
+  - `app/build.gradle.kts`
+- Manifest (source + merged outputs):
   - `app/src/main/AndroidManifest.xml`
-  - `app/src/main/res/mipmap-*` and icon source assets in workspace
+  - `app/build/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml`
 
-## Build and Install (CMD-safe)
+## Build, Test, Install
 ```bat
 cd E:\MyCode\SB-courselist
 .\gradlew.bat :app:compileDebugKotlin
+.\gradlew.bat :app:testDebugUnitTest --tests com.sb.courselist.parser.TemplateRuleEngineTest --console=plain
 .\gradlew.bat :app:assembleDebug
 "E:\Android\Sdk\platform-tools\adb.exe" devices
 "E:\Android\Sdk\platform-tools\adb.exe" install -r "E:\MyCode\SB-courselist\app\build\outputs\apk\debug\app-debug.apk"
@@ -91,10 +74,15 @@ cd E:\MyCode\SB-courselist
 ```
 
 ## Next Priority
-1. Reinstall on a connected device and confirm latest font + card alignment behavior visually.
-2. If legibility is still weak, only tweak card title font family/weight, keep layout unchanged.
-3. Revisit parser weekend-duplication diagnosis after UI acceptance.
+1. Install `2.0` APK on a connected device and verify:
+   - Yangxiao PDF now imports both NLP time blocks
+   - 4-period card title alignment appears centered in compact mode
+2. Decide whether to do security hardening pass:
+   - remove unnecessary network reachability where possible
+   - release persisted URI permission after import if no longer needed
+   - consider DB encryption if threat model requires it
+3. If parser acceptance passes, continue UI polish only.
 
 ## Restore Context
-- Next agent prompt:
-  - `Read E:\MyCode\SB-courselist\AGENT_CONTEXT.md, then continue from latest UI validation (font readability + compact card alignment) and install to device if connected.`
+- Suggested next prompt:
+  - `Read E:\MyCode\SB-courselist\AGENT_CONTEXT.md, install the 2.0 debug APK if device is connected, then verify Yangxiao PDF import and 4-period card alignment on device.`
