@@ -41,13 +41,14 @@ class TemplateRuleEngine {
         val parsed = mutableListOf<MutableCourse>()
         byPage.forEach { (page, pageTokens) ->
             val anchors = extractDayAnchors(pageTokens)
-            val dayBounds = if (anchors.size >= 5) buildDayBounds(anchors) else referenceDayBounds
+            val hasAnchors = anchors.size >= 5
+            val dayBounds = if (hasAnchors) buildDayBounds(anchors) else referenceDayBounds
             if (dayBounds.size < 5) return@forEach
 
-            val headerBottom = if (anchors.size >= 5) {
+            val headerBottom = if (hasAnchors) {
                 anchors.maxOf { it.bottom } + HEADER_BOTTOM_PAD
             } else {
-                referenceHeaderBottom
+                resolveHeaderBottomForAnchorlessPage(pageTokens, referenceHeaderBottom)
             }
 
             val dayWords = assignWordsByDay(pageTokens, dayBounds, headerBottom)
@@ -195,6 +196,26 @@ class TemplateRuleEngine {
                 ?.let { bound -> assigned[bound.day]?.add(token) }
         }
         return assigned.mapValues { (_, list) -> list.toList() }
+    }
+
+    private fun resolveHeaderBottomForAnchorlessPage(
+        pageTokens: List<TextToken>,
+        referenceHeaderBottom: Float,
+    ): Float {
+        if (pageTokens.isEmpty() || !referenceHeaderBottom.isFinite()) return referenceHeaderBottom
+
+        val earliestDetailY = pageTokens
+            .asSequence()
+            .filter { token -> PERIOD_REGEX.containsMatchIn(token.text) }
+            .map { token -> token.y }
+            .minOrNull()
+            ?: return referenceHeaderBottom
+
+        return if (earliestDetailY <= referenceHeaderBottom + HEADERLESS_CONTINUATION_Y_TOLERANCE) {
+            Float.NEGATIVE_INFINITY
+        } else {
+            referenceHeaderBottom
+        }
     }
 
     private fun wordsToLines(tokens: List<TextToken>): List<LineItem> {
@@ -770,6 +791,7 @@ class TemplateRuleEngine {
         private const val WEEK_ALL = "all"
         private const val LINE_Y_TOLERANCE = 3.4f
         private const val HEADER_BOTTOM_PAD = 1.5f
+        private const val HEADERLESS_CONTINUATION_Y_TOLERANCE = 2f
         private const val HEADER_SCAN_HEIGHT = 140f
         private const val PERIOD_AXIS_X_RATIO = 0.2f
         private const val PERIOD_AXIS_RIGHT_MARGIN = 8f

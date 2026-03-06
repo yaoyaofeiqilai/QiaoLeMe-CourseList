@@ -233,6 +233,55 @@ class TemplateRuleEngineTest {
         assertEquals("20:00-20:45", result.meta.periodTimes[11])
     }
 
+    @Test
+    fun parse_keepsTopCoursesOnAnchorlessContinuationPage() {
+        val page1 = listOf(
+            TextToken("\u661f\u671f\u65e5", 133f, 63.4f, 36f, 12f, 1),
+            TextToken("\u661f\u671f\u4e00", 236.8f, 63.4f, 36f, 12f, 1),
+            TextToken("\u661f\u671f\u4e8c", 340.7f, 63.4f, 36f, 12f, 1),
+            TextToken("\u661f\u671f\u4e09", 444.5f, 63.4f, 36f, 12f, 1),
+            TextToken("\u661f\u671f\u56db", 548.4f, 63.4f, 36f, 12f, 1),
+            TextToken("\u661f\u671f\u4e94", 652.2f, 63.4f, 36f, 12f, 1),
+            TextToken("\u661f\u671f\u516d", 756.1f, 63.4f, 36f, 12f, 1),
+            TextToken("\u81ea\u7136\u8bed\u8a00\u5904\u7406", 236.8f, 81.6f, 60f, 9f, 1),
+            TextToken(
+                "(1-2\u8282)5-8\u5468/\u5730\u70b9:\u7535\u5b50\u697c416A/\u6559\u5e08:\u6768\u6714",
+                236.8f,
+                94.5f,
+                120f,
+                8f,
+                1,
+            ),
+        )
+        val page2 = listOf(
+            TextToken("\u5b66\u65f6:12/\u5b66\u5206:1", 548.4f, 21f, 45f, 8f, 2),
+            TextToken("7", 78.1f, 33.4f, 8f, 12f, 2),
+            TextToken("\u81ea\u7136\u8bed\u8a00\u5904\u7406", 236.8f, 33.6f, 58f, 9f, 2),
+            TextToken(
+                "(6-8\u8282)1-8\u5468/\u5730\u70b9:\u6587\u6e0a406/\u6559\u5e08:\u6768\u6714",
+                236.8f,
+                46.5f,
+                120f,
+                8f,
+                2,
+            ),
+            TextToken("8", 78.1f, 94.2f, 8f, 12f, 2),
+        )
+
+        val result = engine.parse(page1 + page2, sourceTag = "unit-test")
+        assertNotNull(result)
+
+        val mondayNlp = result!!.courses.filter {
+            it.dayOfWeek == 1 && it.name.contains("\u81ea\u7136\u8bed\u8a00\u5904\u7406")
+        }
+        assertTrue(
+            mondayNlp.any { it.startPeriod == 1 && it.endPeriod == 2 && it.weekPattern == "5-8\u5468" },
+        )
+        assertTrue(
+            mondayNlp.any { it.startPeriod == 6 && it.endPeriod == 8 && it.weekPattern == "1-8\u5468" },
+        )
+    }
+
     private fun dayHeaderOnlyTokens(page: Int = 1): List<TextToken> {
         return listOf(
             TextToken("\u65e5", 120f, 20f, 8f, 8f, page),

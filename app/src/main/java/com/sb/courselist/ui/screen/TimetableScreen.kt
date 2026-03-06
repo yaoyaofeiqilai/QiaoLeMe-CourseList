@@ -899,7 +899,7 @@ private fun DayCourseColumn(
                 lineHeight = 11.sp,
                 fontWeight = FontWeight.Medium,
             )
-            val compactAlignCenter = compactMode && span <= 3
+            val compactAlignCenter = compactMode && span <= 4
             val compactHorizontalAlignment = if (compactAlignCenter) Alignment.CenterHorizontally else Alignment.Start
             val compactTextAlign = if (compactAlignCenter) TextAlign.Center else TextAlign.Start
 
